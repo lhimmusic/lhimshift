@@ -4176,7 +4176,7 @@ setInterval(() => syncNod(false), 250);
 setInterval(() => { if (playing) syncNod(true); }, 3000);
 syncNod(true);
 
-// ---------- 카카오톡에서 열었을 때만: 작은 'Safari로 열기' 링크 ----------
+// ---------- 카카오톡에서 열었을 때만: 작은 '새 창으로 열기' 링크 ----------
 // 카카오톡 내장 브라우저는 대화방으로 돌아가면 닫혀서 프로그램이 꺼짐 → 바깥 브라우저에서 열어 두면 오가도 유지됨
 if (/KAKAOTALK/i.test(navigator.userAgent)) {
   const go = document.createElement('a');
