@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LHIMSHIFT</title>
-<meta name="description" content="MIDI·오디오 파일의 템포와 키를 바꿔 듣고 저장하는 웹 도구. 파일은 서버에 올리지 않고 내 기기에서만 처리됩니다.">
+<meta name="description" content="피아니스트 허림, 보이싱 바이블, 패턴 바이블">
 <meta name="theme-color" content="#533775">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="LHIMSHIFT">
-<meta property="og:title" content="LHIMSHIFT">
-<meta property="og:description" content="MIDI·오디오 파일의 템포와 키를 바꿔 듣고 저장하는 웹 도구">
+<meta property="og:site_name" content="허림닷컴">
+<meta property="og:title" content="LHIMSHIFT | 허림닷컴">
+<meta property="og:description" content="피아니스트 허림, 보이싱 바이블, 패턴 바이블">
 <meta property="og:url" content="https://lhimmusic.github.io/lhimshift/">
-<meta property="og:image" content="https://lhimmusic.github.io/lhimshift/og-image.png">
+<meta property="og:image" content="https://cdn.imweb.me/upload/S202202153e7f8b39eabbd/2e2c7edf7a250.png">
 <meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
+<meta property="og:image:height" content="627">
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADCUlEQVR42u1XTWhUVxT+zs/MvEkMLqwUU+oPLtyKgtJdoT+CUBFKunRR6koUlLh+ZuUiUUFXKnRTUEoIhBQ32iwiQtBuQhf+QIsSRBE3Qhjnzbx7z3ExjGRCmLyME9144MLj3vvu991zv3vuOQQAaZry2NiY/XTw1JcJqmdAdMTc9gBO6IuRM/ETuM9kqF/86/7lV21Man8cPTD6Y4n1urBujxZgHtFPYxIIK6KFxdzC8ekHE7fTNGUCgJ+/OftdiSt/xxgQLUQiMEDUVwZwd4cJq4gocmt8PzU/Pksje09utUp1QYi3BQtGRIINNHePysrR7SU36ns5lJLRkpSHPwY4ABCRBAtWkvJwKCWjSoyRaMFBoDV+BHPnlBitRxagaMGJMaIE7DKPoC5nTkQIecDbWmNZHzA4VAX1IBUCcQsTuxSAA+gKnjcDhndsxbeH98Pd3/fd+vMeGlkTzAx370kS2g28TaDZyLHt6y/wy28/dIzdmb6P+tsGmHuXhBYUDkIeEKPBooGFUVuq97rrDtN1qBciDALAwhDh/gQofGL7TOAzgU9OQPFhD8v7tiLAoWiI+CACIUSEENvP7LJY34oVG0qAiDC0eaC1iEoHgRgN9VqjUEqjPSADAKqDFVz443QHsJmBmfFo4SnGTl5DdaACM984DwxsSlYdG9hU3RgNmHnnjlagtD3Q1kVfCTAzmFdmRZ2H3BZeUi2vi0DXhMTdUUlK+P/xc5w7cbXQorWlOsoVLfJcr52QuDtYGUtvavjn7sNi3hJCJSkX0QGpA0+FZGf04ARa/fI6IMoYHKoWzbS6qt/hJqQUPT5jN0wKK8Hh3T3RElmx5mvxc2ElN0yy5tlEHpsvlJXd+1yPdSlM8th8oXk2wZMLV16D/RiLkrBKi0Qfkr1VSzOPwiosSmA/Nrlw5TWnacpT8+OzWZ4dArBY1kSYlPoNz6RU1kQALGZ5dmhqfnw2TVOWubk5T9OUr944/9/ur/bdFGcD0RYHtqx1Q9ZTnhPRE7f4e4b6rzMPLv3brsrfAdkXhMZvwe7DAAAAAElFTkSuQmCC">
@@ -2648,6 +2648,25 @@ registerProcessor('lhimshift-player', LhimPlayerProcessor);
 
 </script>
 <script>
+// ---------- 예전 페이지를 보고 있으면 자동으로 최신 버전 열기 ----------
+// 폰 브라우저(특히 카카오톡)는 한 번 연 페이지를 기억해 두고 옛 화면을 보여 준다.
+// 열릴 때 서버에 '최신 파일 수정 시각'만 물어보고, 지금 화면보다 새로우면 한 번 새로고침한다.
+(function checkNewVersion() {
+  if (!/^https?:$/.test(location.protocol)) return;
+  const mine = Date.parse(document.lastModified);
+  if (!mine) return;
+  const url = location.href.replace(/([?&])v=\d+&?/, '$1').replace(/[?&]$/, '');
+  fetch(url, { method: 'HEAD', cache: 'no-store' }).then(res => {
+    const server = Date.parse(res.headers.get('last-modified') || '');
+    if (!server || server <= mine + 2000) return;          // 이미 최신
+    const tried = sessionStorage.getItem('lhimshift-updated');
+    if (tried === String(server)) return;                   // 같은 버전으로는 한 번만 (무한 새로고침 방지)
+    sessionStorage.setItem('lhimshift-updated', String(server));
+    const sep = url.includes('?') ? '&' : '?';
+    location.replace(url + sep + 'v=' + Math.floor(server / 1000));   // 새 주소로 열어 기억된 옛 파일을 건너뜀
+  }).catch(() => {});
+})();
+
 // ---------- MIDI 파서 ----------
 function parseMidi(buf) {
   const d = new DataView(buf);
