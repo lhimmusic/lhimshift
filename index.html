@@ -363,7 +363,14 @@ a.brand:hover, a.brand:hover i { color: #8660b2; }
 .head.show { opacity: 1; transition: transform .5s cubic-bezier(.34, 1.4, .5, 1), opacity .25s ease; }   /* 누르면 바로 나타나고, 사라질 땐 스르륵 */
 .head img { position: relative; z-index: 1; display: block; width: 100%; height: 100%; object-fit: contain; }
 /* 템포 카드의 얼굴: 지금 템포로 한 박에 한 번 까딱 */
-.tempo-head img { transform-origin: 50% 92%; will-change: transform; }   /* 움직임은 JS가 박 위치에 맞춰 그림 */
+.tempo-head img { transform-origin: 50% 92%; animation: headNod var(--beat, .5s) linear infinite; animation-delay: var(--beatDelay, 0s); }
+/* 한 박 = 한 번 까딱. 0%(박) 가장 깊이 숙임 → 32% 제자리 → 84%부터 다시 숙이기 시작 → 100%(다음 박) */
+@keyframes headNod {
+  0%   { transform: translateY(3.5px) rotate(6deg); }
+  32%  { transform: translateY(0) rotate(0deg); animation-timing-function: linear; }
+  84%  { transform: translateY(0) rotate(0deg); animation-timing-function: ease-in; }
+  100% { transform: translateY(3.5px) rotate(6deg); }
+}
 .wx { position: absolute; left: 50%; pointer-events: none; opacity: 0; transition: opacity .45s, transform .45s; }
 .sun { top: 42%; width: 94px; height: 94px; z-index: 0; transform: translate(-50%, calc(-50% + var(--sunY, 16px))) scale(var(--sunS, .5)); opacity: var(--sunO, 0);
   transition: opacity .6s, transform .8s cubic-bezier(.3, .8, .4, 1); }   /* 아래에서 떠오름 */
@@ -398,7 +405,7 @@ a.brand:hover, a.brand:hover i { color: #8660b2; }
 .spark:nth-child(3) { left: 8%; top: 62%; animation-delay: .9s; } .spark:nth-child(4) { right: 6%; top: 58%; animation-delay: .25s; }
 .spark:nth-child(5) { left: 40%; top: -4%; animation-delay: .7s; } .spark:nth-child(6) { right: 30%; top: 80%; animation-delay: 1.1s; }
 @keyframes twinkle { 0%, 100% { transform: scale(.35) rotate(0deg); opacity: .3; } 50% { transform: scale(1.15) rotate(45deg); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .head { transition: none; } .sun svg, .drops i, .spark.on { animation: none; } }
+
 
 /* 카드: 그림자 없이 얇은 한 줄 테두리만 */
 .app { box-shadow: none; border: 1px solid #d9cce7; }
@@ -3272,6 +3279,7 @@ function stop() {
 
 function seekTo(t) {
   if (!song) return;
+  setTimeout(() => syncNod(true), 60);
   t = Math.min(Math.max(0, t), song.duration);
   if (isAudio()) { playerSeek(t); return; }
   if (playing) {
@@ -4133,36 +4141,49 @@ function beatPosition() {
   let i = m.length - 1; while (i > 0 && m[i].t > pos) i--;
   return song.beatsAt[i] + (pos - m[i].t) * m[i].bpm / 60;
 }
-const REDUCE_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
-function nodTempoHead() {
-  requestAnimationFrame(nodTempoHead);
+// 까딱임은 CSS 애니메이션이 움직이고(폰에서도 확실히 동작), 여기서는 속도와 시작점만 곡의 박에 맞춘다
+let nodKey = '';
+function syncNod(force) {
   const head = $('tempoHead'), img = head.firstElementChild;
-  if (!head.classList.contains('show') && getComputedStyle(head).opacity === '0') return;   // 안 보일 땐 쉼
-  if (REDUCE_MOTION.matches) { img.style.transform = ''; return; }
-  let beat = playing ? beatPosition() : null;
-  if (beat === null) beat = performance.now() / 1000 * baseBpm() * rate / 60;
-  const p = beat - Math.floor(beat);        // 한 박 안에서의 위치 0~1 (0 = 박이 시작되는 순간)
-  const k = p >= 0.84 ? (p - 0.84) / 0.16 : p < 0.32 ? 1 - p / 0.32 : 0;   // 박 직전에 숙여 박에서 가장 깊이, 이후 천천히 올라옴
-  const e = k * k * (3 - 2 * k);
-  img.style.transform = `translateY(${(3 * e).toFixed(2)}px) rotate(${(5 * e).toFixed(2)}deg)`;
+  const flowing = playing && ctx && ctx.state === 'running';
+  let bpm = baseBpm() * rate;
+  if (flowing && song && !isAudio()) bpm = fileBpmAt(curPos()) * rate;   // MIDI는 지금 위치의 템포
+  const dur = 60 / bpm;
+  let beat = flowing ? beatPosition() : null;
+  if (beat === null) beat = performance.now() / 1000 / dur;
+  const phase = beat - Math.floor(beat);
+  const key = dur.toFixed(4) + (flowing ? 'p' : 'f');
+  if (!force && key === nodKey) return;          // 속도·재생 상태가 그대로면 건드리지 않음 (자연스럽게 계속)
+  nodKey = key;
+  head.style.setProperty('--beat', dur.toFixed(4) + 's');
+  head.style.setProperty('--beatDelay', (-phase * dur).toFixed(4) + 's');   // 지금 박 위치에서 시작
+  img.style.animation = 'none'; void img.offsetWidth; img.style.animation = '';   // 새 속도·시작점으로 다시 시작
 }
-nodTempoHead();
+// 템포가 바뀌거나 재생/멈춤/이동이 있을 때 맞추고, 재생 중에는 3초마다 한 번 어긋남을 바로잡음
+setInterval(() => syncNod(false), 250);
+setInterval(() => { if (playing) syncNod(true); }, 3000);
+syncNod(true);
 
-// ---------- 카카오톡 안에서 열면 기본 브라우저(Safari 등)로 넘기기 ----------
-// 카카오톡 내장 브라우저는 웹 오디오 소리가 막히는 경우가 많다 → 카카오톡이 지원하는 방식으로 바깥 브라우저에서 다시 연다
-if (/KAKAOTALK/i.test(navigator.userAgent) && !/[?&]inapp\b/.test(location.search)) {
-  location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
-  setTimeout(() => {                          // 넘어가지 않았으면 안내
-    if (document.visibilityState === 'visible' && !song)
-      $('info').textContent = '카카오톡 안에서는 소리가 나지 않을 수 있어요. 오른쪽 아래 ⋯ 를 눌러 “다른 브라우저로 열기”를 선택해 주세요.';
-  }, 1500);
+// ---------- 카카오톡 안에서 열었을 때: 자동으로 넘기지 않고, 안내와 'Safari로 열기' 버튼만 ----------
+// (자동으로 넘기면 카카오톡이 처리 못 할 때 페이지가 멈출 수 있음 → 사용자가 누를 때만 이동)
+if (/KAKAOTALK/i.test(navigator.userAgent)) {
+  const bar = document.createElement('div');
+  bar.style.cssText = 'display:flex;align-items:center;gap:10px;justify-content:space-between;margin:0 0 14px;padding:10px 12px;' +
+    'border-radius:10px;background:#f3eef9;color:#533775;font-size:13px;line-height:1.4;';
+  bar.innerHTML = '<span>카카오톡 안에서는 소리가 나지 않을 수 있어요.</span>';
+  const go = document.createElement('a');
+  go.textContent = 'Safari로 열기';
+  go.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+  go.style.cssText = 'flex:none;padding:7px 10px;border-radius:8px;background:#533775;color:#fff;text-decoration:none;font-weight:600;';
+  bar.appendChild(go);
+  $('drop').insertBefore(bar, $('drop').firstChild);
 }
 
 // ---------- 점검 화면 (주소 끝에 ?debug 를 붙이면 표시) ----------
 // 폰에서 소리가 안 날 때 원인을 찾기 위한 정보: 브라우저, 오디오 상태, 재생 방식, 오류
 if (/[?&]debug\b/.test(location.search)) {
   const box = document.createElement('pre');
-  box.style.cssText = 'position:fixed;left:6px;right:6px;bottom:6px;z-index:9999;margin:0;padding:8px 10px;max-height:45vh;overflow:auto;' +
+  box.style.cssText = 'position:fixed;left:6px;right:6px;top:6px;z-index:9999;pointer-events:none;margin:0;padding:8px 10px;max-height:45vh;overflow:auto;' +
     'font:11px/1.45 -apple-system,system-ui,sans-serif;white-space:pre-wrap;word-break:break-all;background:rgba(20,16,30,.88);color:#e9e3f5;border-radius:10px;';
   document.body.appendChild(box);
   const errs = [];
@@ -4176,6 +4197,7 @@ if (/[?&]debug\b/.test(location.search)) {
       '오디오세션: ' + (navigator.audioSession ? navigator.audioSession.type : '미지원') + ' | 잠금해제: ' + outputUnlocked,
       '파일: ' + (song ? (song.kind || 'midi') + ' ' + fmt(song.duration) : '없음') + ' | 재생기: ' + (player ? (player.script ? 'ScriptProcessor' : 'AudioWorklet') : '없음'),
       '재생중: ' + playing + ' | 위치: ' + (song ? curPos().toFixed(2) : '-') + ' | 템포비율: ' + rate.toFixed(2) + ' | 키: ' + keyShift,
+      '템포얼굴: ' + ($('tempoHead').classList.contains('show') ? '보임' : '숨김') + ' | 한박: ' + $('tempoHead').style.getPropertyValue('--beat') + ' | 기울기: ' + getComputedStyle($('tempoHead').firstElementChild).transform + ' | 박: ' + (song && playing ? (beatPosition() || 0).toFixed(2) : '-'),
       '안내문구: ' + ($('info').textContent || '(없음)'),
       ...errs.slice(-5)
     ].join('\n');
