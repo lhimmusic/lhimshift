@@ -328,6 +328,9 @@ input[type=range]:disabled::-moz-range-thumb { border-color:#9985b2; background:
  .btn { height:38px; font-size:13px; }
 }
 
+/* 카드: 그림자 없이 얇은 한 줄 테두리만 */
+.app { box-shadow: none; border: 1px solid #d9cce7; }
+
 /* 세로가 짧은 화면(노트북, 사이트 안 삽입 영역): 바깥 여백부터 줄인다 */
 @media (max-height: 860px) { body { padding-top: 14px; padding-bottom: 14px; } }
 @media (max-height: 700px) { body { padding-top: 8px; padding-bottom: 8px; } }
@@ -2670,7 +2673,8 @@ function killVoice(v, now) {
 
 // ---------- GM 음원 (FluidR3 GM 사운드폰트, WebAudioFont 데이터) ----------
 // 곡에 쓰인 악기·드럼 음만 인터넷에서 받아 온다. 못 받으면 아래 기본 신스로 재생.
-const GM_BASE = 'https://cdn.jsdelivr.net/gh/surikov/webaudiofontdata@master/sound/';
+// 버전 고정: 원작자 저장소의 2019-03-07 커밋 (저장소가 바뀌거나 지워져도 jsDelivr가 이 버전을 계속 보관)
+const GM_BASE = 'https://cdn.jsdelivr.net/gh/surikov/webaudiofontdata@23ca907d4370a04fd89ca483a92915e4d6159ab9/sound/';
 const gmCache = new Map();   // 'p0'~'p127'(악기) / 'd35'~(드럼 음) → Promise<zones|null>
 const gmZones = new Map();   // 준비 끝난 것만 (재생 중 바로 꺼내 쓰기용)
 const gmFile = key => key[0] === 'p'
