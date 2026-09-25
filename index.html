@@ -409,7 +409,7 @@ a.brand:hover, a.brand:hover i { color: #8660b2; }
 .stage.compact .empty-copy { gap: 3px; }              /* 화면이 낮으면 음표를 작게 (빼지는 않음) */
 .stage.compact .empty-mark svg { width: 22px; height: 22px; }
 .stage.compact .empty-copy strong { font-size: 15px; }
-/* 문구: 마우스 쓰는 기기는 '끌어다 놓거나 열어서', 터치 기기(폰·태블릿)는 끌어다 놓기가 없으니 '열어서'만 */
+/* 문구: 마우스 기기는 '끌어다 놓거나 클릭', 터치 기기(폰·태블릿)는 끌어다 놓기가 없으니 '눌러서'만 */
 .empty-copy strong span { font: inherit; color: inherit; }
 .empty-copy .tap-txt { display: none; }
 @media (hover: none) and (pointer: coarse) { .empty-copy .drag-txt { display: none; } .empty-copy .tap-txt { display: inline; } }
@@ -467,7 +467,7 @@ html.dense2 .big-num, html.dense2 #tempoNum { font-size: 30px; }
   <section class="stage empty" id="stage">
     <canvas id="roll"></canvas>
     <div class="msg" id="info" role="status" aria-live="polite"></div>
-    <div class="empty-copy"><div class="empty-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true"><path d="M9 3.5v11.1A3.6 3.6 0 1 0 11 18V8.2l8-1.9v6.3A3.6 3.6 0 1 0 21 16V1.8z"/></svg></div><strong><span class="drag-txt">파일을 끌어다 놓거나 열어서 불러오세요</span><span class="tap-txt">파일을 열어서 불러오세요</span></strong><span>오디오 · MIDI 파일</span></div>
+    <div class="empty-copy"><div class="empty-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true"><path d="M9 3.5v11.1A3.6 3.6 0 1 0 11 18V8.2l8-1.9v6.3A3.6 3.6 0 1 0 21 16V1.8z"/></svg></div><strong><span class="drag-txt">파일을 끌어다 놓거나 클릭해서 불러오세요</span><span class="tap-txt">여기를 눌러 파일을 불러오세요</span></strong><span>오디오 · MIDI 파일</span></div>
   </section>
 
   <div class="seekrow">
