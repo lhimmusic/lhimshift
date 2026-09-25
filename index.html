@@ -328,6 +328,9 @@ input[type=range]:disabled::-moz-range-thumb { border-color:#9985b2; background:
  .btn { height:38px; font-size:13px; }
 }
 
+/* 세로가 짧은 화면(노트북, 사이트 안 삽입 영역): 바깥 여백부터 줄인다 */
+@media (max-height: 860px) { body { padding-top: 14px; padding-bottom: 14px; } }
+@media (max-height: 700px) { body { padding-top: 8px; padding-bottom: 8px; } }
 </style>
 </head>
 <body>
@@ -2665,7 +2668,116 @@ function killVoice(v, now) {
   voices.delete(v);
 }
 
+// ---------- GM 음원 (FluidR3 GM 사운드폰트, WebAudioFont 데이터) ----------
+// 곡에 쓰인 악기·드럼 음만 인터넷에서 받아 온다. 못 받으면 아래 기본 신스로 재생.
+const GM_BASE = 'https://cdn.jsdelivr.net/gh/surikov/webaudiofontdata@master/sound/';
+const gmCache = new Map();   // 'p0'~'p127'(악기) / 'd35'~(드럼 음) → Promise<zones|null>
+const gmZones = new Map();   // 준비 끝난 것만 (재생 중 바로 꺼내 쓰기용)
+const gmFile = key => key[0] === 'p'
+  ? `${String(+key.slice(1) * 10).padStart(4, '0')}_FluidR3_GM_sf2_file.js`
+  : `128${key.slice(1)}_0_FluidR3_GM_sf2_file.js`;
+
+// 데이터 파일은 JS 객체 형태라 실행하지 않고 JSON으로 바꿔 읽는다
+function parseWaf(text) {
+  const body = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)
+    .replace(/^\s*\/\/.*$/gm, '')            // 줄 단위 주석 (음원 base64 안의 '//'는 건드리지 않음)
+    .replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":')
+    .replace(/'/g, '"')
+    .replace(/,\s*([\]}])/g, '$1');
+  return JSON.parse(body).zones;
+}
+
+function gmLoad(key) {
+  if (!gmCache.has(key)) {
+    const job = (async () => {
+      const res = await fetch(GM_BASE + gmFile(key));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const zones = parseWaf(await res.text());
+      await Promise.all(zones.map(async z => {
+        if (z.file) {
+          const bin = atob(z.file), u8 = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+          z.buffer = await ctx.decodeAudioData(u8.buffer);
+        } else if (z.sample) {               // 16비트 PCM 원본
+          const bin = atob(z.sample), len = bin.length >> 1;
+          z.buffer = ctx.createBuffer(1, len, z.sampleRate);
+          const d = z.buffer.getChannelData(0);
+          for (let i = 0; i < len; i++) { let v = bin.charCodeAt(i * 2) + bin.charCodeAt(i * 2 + 1) * 256; if (v >= 32768) v -= 65536; d[i] = v / 32768; }
+        }
+        delete z.file; delete z.sample;
+      }));
+      return zones.filter(z => z.buffer);
+    })().catch(() => { gmCache.delete(key); return null; });   // 실패하면 다음 곡에서 다시 시도
+    gmCache.set(key, job);
+  }
+  return gmCache.get(key);
+}
+
+async function prepareGM(s) {
+  initAudio();
+  const keys = new Set();
+  s.notes.forEach(n => keys.add(n.ch === 9 ? 'd' + n.note : 'p' + n.prog));
+  const todo = [...keys].filter(k => !gmZones.has(k));
+  if (!todo.length) return;
+  const msg = t => { if (song === s) $('info').textContent = t; };
+  let done = 0, ok = 0;
+  msg(`GM 음원 불러오는 중… 0/${todo.length}`);
+  const queue = todo.slice();
+  await Promise.all(Array.from({ length: 6 }, async () => {
+    while (queue.length) {
+      const k = queue.shift(), z = await gmLoad(k);
+      if (z && z.length) { gmZones.set(k, z); ok++; }
+      msg(`GM 음원 불러오는 중… ${++done}/${todo.length}`);
+    }
+  }));
+  if (!ok) { msg('GM 음원을 받지 못해 기본 소리로 재생합니다 (인터넷 연결 확인)'); setTimeout(() => msg(''), 2500); }
+  else msg('');
+}
+
+// 피아노·크로매틱·기타·베이스·민속·타악 계열은 누르고 있어도 소리가 줄어든다
+const DECAYING = new Set([0, 1, 3, 4, 13, 14]);
+function playSample(n, zones, when, dur) {
+  const drum = n.ch === 9;
+  const note = drum ? n.note : n.note + keyShift;
+  let z = zones.find(q => note >= q.keyRangeLow && note <= q.keyRangeHigh);
+  if (!z) z = zones.reduce((a, q) => Math.min(Math.abs(note - q.keyRangeLow), Math.abs(note - q.keyRangeHigh)) < Math.min(Math.abs(note - a.keyRangeLow), Math.abs(note - a.keyRangeHigh)) ? q : a);
+  const src = ctx.createBufferSource();
+  src.buffer = z.buffer;
+  const base = z.originalPitch - 100 * (z.coarseTune || 0) - (z.fineTune || 0);
+  const pr = Math.pow(2, (100 * note - base) / 1200);
+  src.playbackRate.value = pr;
+  const looped = !drum && z.loopStart > 1 && z.loopStart < z.loopEnd;
+  if (looped) { src.loop = true; src.loopStart = z.loopStart / z.sampleRate; src.loopEnd = z.loopEnd / z.sampleRate; }
+
+  const peak = Math.pow(n.vel / 127, 1.5) * n.vol * 0.8;
+  const g = ctx.createGain(), pan = ctx.createStereoPanner();
+  pan.pan.value = n.pan;
+  src.connect(g); g.connect(pan); pan.connect(chGain[n.ch]);
+  const atk = 0.004, natural = z.buffer.duration / pr;   // 샘플 자체 길이(재생 속도 반영)
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(peak, when + atk);
+  let stopAt;
+  if (drum) {
+    stopAt = when + natural;                      // 드럼은 샘플 끝까지
+  } else {
+    let end = Math.max(when + dur, when + atk + 0.02);
+    const decaying = looped && DECAYING.has(n.prog >> 3);
+    const tau = Math.min(4, Math.max(0.4, 1.6 * (1 + (72 - note) / 30)));
+    let vEnd = peak;
+    if (decaying) { g.gain.setTargetAtTime(0, when + atk, tau); vEnd = peak * Math.exp(-(end - when - atk) / tau); }
+    if (!looped) end = Math.min(end, when + natural);
+    const rel = DECAYING.has(n.prog >> 3) ? 0.12 : 0.25;
+    g.gain.setValueAtTime(vEnd, end);
+    g.gain.setTargetAtTime(0, end, rel / 3);
+    stopAt = looped ? end + rel * 2 : Math.min(end + rel * 2, when + natural);
+  }
+  src.start(when); src.stop(stopAt + 0.02);
+  track([src, g, pan], g, stopAt);
+}
+
 function playNote(n, when, dur) {
+  const zones = gmZones.get(n.ch === 9 ? 'd' + n.note : 'p' + n.prog);
+  if (zones) return playSample(n, zones, when, dur);
   if (n.ch === 9) return playDrum(n, when);
   const T = TIMBRE[n.prog >> 3];
   const f = 440 * Math.pow(2, (n.note + keyShift - 69) / 12);
@@ -2952,6 +3064,11 @@ async function play() {
   }
   initAudio();
   if (ctx.state !== 'running') await ctx.resume();
+  if (song.gmReady) {                     // GM 음원 받는 중이면 끝날 때까지 기다렸다가 재생
+    const s = song;
+    await s.gmReady;
+    if (song !== s || playing) return;
+  }
   if (offset >= song.duration) offset = 0;
   idx = lowerBound(offset);
   startCtx = ctx.currentTime + 0.05;
@@ -3393,15 +3510,64 @@ async function saveAs(fmt) {
 
 // ---------- Real-time playback pitch; offline export keeps its existing DSP ----------
 let livePitch = null, livePitchModule = null;
+// AudioWorklet을 못 쓰는 환경(보안 컨텍스트가 아닌 페이지 등)용: 같은 SoundTouch 엔진을 메인 스레드의 ScriptProcessor로 실시간 실행
+let SoundTouchMain = null;
+function soundTouchClass() {
+  if (!SoundTouchMain) {
+    const src = $('livePitchSource').textContent;
+    const core = src.slice(0, src.indexOf('//#region ../worklet-base'));   // 워크릿 전용 부분 앞까지 = DSP 코어
+    SoundTouchMain = new Function(core + '\nreturn SoundTouch;')();
+  }
+  return SoundTouchMain;
+}
+function setupScriptPitch(el) {
+  const ST = soundTouchClass();
+  const pipe = new ST({ sampleRate: ctx.sampleRate });
+  const N = 2048;
+  const node = ctx.createScriptProcessor(N, 2, 2);
+  const source = ctx.createMediaElementSource(el);
+  const inBuf = new Float32Array(N * 2), outBuf = new Float32Array(N * 2);
+  let wasShifted = false;
+  node.onaudioprocess = e => {
+    const ib = e.inputBuffer, ob = e.outputBuffer;
+    const inL = ib.getChannelData(0), inR = ib.numberOfChannels > 1 ? ib.getChannelData(1) : inL;
+    const oL = ob.getChannelData(0), oR = ob.getChannelData(1), n = inL.length;
+    if (keyShift === 0) {                 // 원래 키: 그대로 통과 (지연·왜곡 없음)
+      if (wasShifted) { pipe.clear(); wasShifted = false; }
+      oL.set(inL); oR.set(inR); return;
+    }
+    wasShifted = true;
+    pipe.pitch = Math.pow(2, keyShift / 12);
+    for (let i = 0; i < n; i++) { inBuf[i * 2] = inL[i]; inBuf[i * 2 + 1] = inR[i]; }
+    pipe.inputBuffer.putSamples(inBuf, 0, n);
+    pipe.process();
+    const k = Math.min(pipe.outputBuffer.frameCount, n);
+    if (k > 0) { pipe.outputBuffer.extract(outBuf, 0, k); pipe.outputBuffer.receive(k); }
+    for (let i = 0; i < n; i++) {
+      oL[i] = i < k ? outBuf[i * 2] : 0;
+      oR[i] = i < k ? outBuf[i * 2 + 1] : 0;
+    }
+  };
+  source.connect(node); node.connect(ctx.destination);
+  livePitch = { element: el, node, source, active: true, script: true, pipe };
+}
+
 function disposeLivePitch() {
   if (!livePitch) return;
+  if (livePitch.script) {
+    livePitch.node.onaudioprocess = null;
+    livePitch.source.disconnect(); livePitch.node.disconnect(); livePitch.pipe.clear();
+    livePitch = null; return;
+  }
   livePitch.node.onprocessorerror = null;
   livePitch.source.disconnect(); livePitch.node.disconnect();
   livePitch.node.port.postMessage('dispose'); livePitch.node.port.close();
   livePitch = null;
 }
 function flushLivePitch() {
-  if (livePitch && livePitch.active) livePitch.node.port.postMessage('flush');
+  if (!livePitch || !livePitch.active) return;
+  if (livePitch.script) livePitch.pipe.clear();
+  else livePitch.node.port.postMessage('flush');
 }
 async function setupLivePitch(el, channels) {
   if (!ctx.audioWorklet || typeof AudioWorkletNode === 'undefined') return;
@@ -3445,7 +3611,12 @@ async function setupLivePitch(el, channels) {
   }
 }
 function applyLiveKey() {
+  // 워크릿이 없거나 준비에 실패했으면, 처음 키를 바꿀 때 ScriptProcessor 경로를 바로 만든다
+  if (!livePitch && audioEl && ctx) {
+    try { setupScriptPitch(audioEl); } catch (_) { livePitch = null; }
+  }
   if (!livePitch || !livePitch.active || livePitch.element !== audioEl) return false;
+  if (livePitch.script) return true;      // 콜백이 keyShift를 직접 읽음
   const parameter = livePitch.node.parameters.get('pitchSemitones');
   parameter.setValueAtTime(keyShift, ctx.currentTime);
   return true;
@@ -3602,6 +3773,7 @@ function loadBuffer(buf, name = '') {
   try { song = parseMidi(buf); song.raw = buf; song.name = name; }
   catch (err) { song = null; $('info').textContent = '읽기 실패: ' + err.message; updateButtons(); return; }
   $('info').textContent = song.notes.length ? '' : '재생할 음표가 없습니다.';
+  if (song.notes.length) song.gmReady = prepareGM(song);
   let lo = 127, hi = 0;
   song.notes.forEach(n => { if (n.ch !== 9) { lo = Math.min(lo, n.note); hi = Math.max(hi, n.note); } });
   if (lo > hi) { lo = 35; hi = 81; }
@@ -3684,7 +3856,8 @@ $('bpmDown').onclick = () => nudge(-1);
 canvas.addEventListener('click', e => {
   if (!song) return;
   const rect = canvas.getBoundingClientRect();
-  seekTo(curPos() + (e.clientX - rect.left - rect.width * 0.2) / 90);
+  const x = (e.clientX - rect.left) * canvas.clientWidth / rect.width;   // 화면 축소(zoom) 상태여도 그림 좌표로 환산
+  seekTo(curPos() + (x - canvas.clientWidth * 0.2) / 90);
 });
 
 window.addEventListener('keydown', e => {
@@ -3780,9 +3953,35 @@ function drawWave(W, H, pos, pps, headX, css) {
 }
 
 
+// ---------- 화면 높이에 맞추기 ----------
+// 어떤 화면에서도 아래가 잘리지 않게: ① 파형 화면 높이를 줄이고(최소 110px) ② 그래도 넘치면 전체를 비율대로 축소
+const appEl = $('drop');
+let fitQueued = false;
+function fitToScreen() {
+  fitQueued = false;
+  appEl.style.zoom = '';
+  canvas.style.height = '';
+  const bs = getComputedStyle(document.body);
+  const avail = window.innerHeight - parseFloat(bs.paddingTop) - parseFloat(bs.paddingBottom);
+  let over = appEl.offsetHeight - avail;
+  if (over > 0) {
+    const cut = Math.min(over, canvas.offsetHeight - 110);
+    if (cut > 0) { canvas.style.height = (canvas.offsetHeight - cut) + 'px'; over -= cut; }
+  }
+  if (over > 0) appEl.style.zoom = Math.max(0.5, avail / appEl.offsetHeight).toFixed(3);
+}
+function queueFit() { if (!fitQueued) { fitQueued = true; requestAnimationFrame(fitToScreen); } }
+window.addEventListener('resize', queueFit);
+// 채널 칩·LUFS 표시처럼 내용이 늘거나 줄 때도 다시 맞춤
+const fitWatch = new MutationObserver(queueFit);
+fitWatch.observe(appEl, { subtree: true, attributes: true, attributeFilter: ['hidden'] });   // 표시/숨김
+fitWatch.observe($('chans'), { childList: true });                                         // MIDI 채널 칩
+if (document.fonts) document.fonts.ready.then(queueFit);
+
 draw();
 updateButtons();
 fillRange(volEl);
+fitToScreen();
 </script>
 </body>
 </html>
