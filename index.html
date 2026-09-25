@@ -359,8 +359,11 @@ a.brand:hover, a.brand:hover i { color: #8660b2; }
 .key-h { display: inline-flex; align-items: center; }
 .head { position: relative; display: inline-block; width: 50px; height: 60px; margin: -12px 0 -10px 10px;
   transform: translateY(var(--lift, 0px)); opacity: 0;
-  transition: transform .5s cubic-bezier(.34, 1.4, .5, 1), opacity .8s ease; }
-.head.show { opacity: 1; transition: transform .5s cubic-bezier(.34, 1.4, .5, 1), opacity .25s ease; }   /* 누르면 바로 나타나고, 사라질 땐 스르륵 */
+  transition: transform .5s cubic-bezier(.34, 1.4, .5, 1); }
+.head.show { opacity: 1; animation: faceIn .25s ease; }                 /* 누르면 바로 나타나고 */
+.head.fading { animation: faceOut 1.5s ease forwards; }                  /* 사라질 땐 1.5초 동안 스르륵 */
+@keyframes faceIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes faceOut { from { opacity: 1; } to { opacity: 0; } }
 .head img { position: relative; z-index: 1; display: block; width: 100%; height: 100%; object-fit: contain; }
 /* 템포 카드의 얼굴: 지금 템포로 한 박에 한 번 까딱 */
 .tempo-head img { transform-origin: 50% 92%; animation: headNod var(--beat, .5s) linear infinite; animation-delay: var(--beatDelay, 0s); }
@@ -4113,9 +4116,16 @@ function setFace(k) {
 // ---------- 얼굴은 평소엔 숨어 있다가, 그 카드를 누르면 나타나고 잠시 뒤 스르륵 사라짐 ----------
 const FACE_SHOW_MS = 5000;   // 마지막으로 누른 뒤 5초 동안 보였다가 스르륵 사라짐
 function peekFace(el) {
+  const wasShown = el.classList.contains('show');
+  el.classList.remove('fading');
   el.classList.add('show');
+  if (wasShown) el.style.animation = 'none';        // 이미 보이는 중이면 다시 나타나는 효과 없이 그대로
+  else el.style.animation = '';
   clearTimeout(el._hideTimer);
-  el._hideTimer = setTimeout(() => el.classList.remove('show'), FACE_SHOW_MS);
+  el._hideTimer = setTimeout(() => {                // 애니메이션으로 페이드 아웃 (전환 효과를 끄는 기기 설정에도 영향 없음)
+    el.style.animation = '';
+    el.classList.remove('show'); el.classList.add('fading');
+  }, FACE_SHOW_MS);
 }
 {
   const [tempoCard, keyCard] = document.querySelectorAll('.cards .card');
