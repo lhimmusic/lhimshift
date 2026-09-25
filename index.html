@@ -3798,7 +3798,7 @@ async function setupPlayer(ab) {
     EngineMain = new Function(core + '\nreturn LhimEngine;')();
   }
   const eng = new EngineMain(ctx.sampleRate); eng.load(chs);
-  const node = ctx.createScriptProcessor(2048, 0, 2);
+  const node = ctx.createScriptProcessor(2048, 1, 2);   // 입력 0개는 Safari에서 오류 → 1개(연결 안 함)
   const p = { node, audioGain, script: true, eng, run: false };
   node.onaudioprocess = e => {
     const L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1);
@@ -3818,15 +3818,32 @@ function disposePlayer() {
   player = null;
 }
 
-// 아이폰: 무음(진동) 모드에서도 소리가 나도록 오디오 세션을 '재생'으로
+// 아이폰: 무음(진동) 모드에서도 소리가 나도록
+//  ① 오디오 세션을 '재생'으로 (iOS 16.4+)  ② 실제로 재생되는 무음 오디오를 반복 (그 이전 iOS용)
+//  화면을 처음 터치하는 순간 한 번 실행하고, 그때 오디오도 깨운다
 let outputUnlocked = false;
+function silentWavUrl() {                  // 0.5초짜리 진짜 무음 WAV (길이 0이면 재생이 실패함)
+  const sr = 8000, n = sr / 2, b = new Uint8Array(44 + n * 2), v = new DataView(b.buffer);
+  const w = (o, t) => { for (let i = 0; i < t.length; i++) b[o + i] = t.charCodeAt(i); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+  let bin = ''; for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+  return 'data:audio/wav;base64,' + btoa(bin);
+}
 function unlockAudioOutput() {
+  if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
   if (outputUnlocked) return; outputUnlocked = true;
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
   try {
-    const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=');
-    a.loop = true; a.volume = 0; a.setAttribute('playsinline', ''); a.play().catch(() => {});
+    const a = new Audio(silentWavUrl());
+    a.loop = true; a.setAttribute('playsinline', ''); a.muted = false;
+    a.play().catch(() => { outputUnlocked = false; });   // 실패하면 다음 터치 때 다시
   } catch (_) {}
+}
+try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}   // 오디오 시작 전에 미리
+for (const ev of ['pointerdown', 'touchend', 'keydown']) {
+  window.addEventListener(ev, () => { initAudio(); unlockAudioOutput(); }, { capture: true, passive: true });
 }
 
 function unloadAudio() {
@@ -3852,7 +3869,8 @@ async function loadAudio(file, buf, my) {
   const lufs = integratedLufs(ab);
   if (my !== loadSeq) return;
 
-  await setupPlayer(ab);
+  try { await setupPlayer(ab); }
+  catch (err) { if (my === loadSeq) $('info').textContent = '재생 준비 실패: ' + (err && err.message || err); return; }
   if (my !== loadSeq) { disposePlayer(); return; }
 
   song = { kind: 'audio', name: file.name, ab, duration: ab.duration, tempoMap: [{ t: 0, bpm: tempo.bpm }], detectedBpm: tempo.bpm, beatOffset: tempo.offset, peaks, notes: [], usedCh: [] };
