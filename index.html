@@ -365,20 +365,40 @@ a.brand:hover, a.brand:hover i { color: #8660b2; }
 /* 템포 카드의 얼굴: 지금 템포로 한 박에 한 번 까딱 */
 .tempo-head img { transform-origin: 50% 92%; will-change: transform; }   /* 움직임은 JS가 박 위치에 맞춰 그림 */
 .wx { position: absolute; left: 50%; pointer-events: none; opacity: 0; transition: opacity .45s, transform .45s; }
-.sun { top: 42%; width: 94px; height: 94px; z-index: 0; transform: translate(-50%, -50%) scale(var(--sunS, .5)); opacity: var(--sunO, 0); }
+.sun { top: 42%; width: 94px; height: 94px; z-index: 0; transform: translate(-50%, calc(-50% + var(--sunY, 16px))) scale(var(--sunS, .5)); opacity: var(--sunO, 0);
+  transition: opacity .6s, transform .8s cubic-bezier(.3, .8, .4, 1); }   /* 아래에서 떠오름 */
 .sun svg { width: 100%; height: 100%; display: block; animation: sunSpin 14s linear infinite; }
 @keyframes sunSpin { to { transform: rotate(360deg); } }
-.rain { top: -20px; width: 40px; z-index: 2; transform: translateX(-50%) scale(var(--rainS, .8)); opacity: var(--rainO, 0); }
+.rain { top: -20px; width: 40px; z-index: 2; transform: translate(-50%, var(--rainY, -8px)) scale(var(--rainS, .8)); opacity: var(--rainO, 0); }
 .rain svg { display: block; width: 100%; height: auto; }
 .drops { position: absolute; left: 4px; right: 4px; top: 17px; height: 40px; }
 .drops i { position: absolute; top: 0; width: 2px; height: 6px; border-radius: 2px; background: #7fb3ff; opacity: 0;
   animation: rainFall .75s linear infinite; }
-.drops i:nth-child(1) { left: 12%; animation-delay: 0s; }   .drops i:nth-child(2) { left: 62%; animation-delay: .38s; }
-.drops i:nth-child(3) { left: 37%; animation-delay: .2s; }  .drops i:nth-child(4) { left: 85%; animation-delay: .55s; }
-.drops i:nth-child(5) { left: 25%; animation-delay: .62s; } .drops i:nth-child(6) { left: 74%; animation-delay: .1s; }
+.drops i:nth-child(1) { left: 12%; animation-delay: 0s; }
+.drops i:nth-child(2) { left: 62%; animation-delay: 0.38s; }
+.drops i:nth-child(3) { left: 37%; animation-delay: 0.2s; }
+.drops i:nth-child(4) { left: 85%; animation-delay: 0.55s; }
+.drops i:nth-child(5) { left: 25%; animation-delay: 0.62s; }
+.drops i:nth-child(6) { left: 74%; animation-delay: 0.1s; }
+.drops i:nth-child(7) { left: 50%; animation-delay: 0.45s; }
+.drops i:nth-child(8) { left: 5%; animation-delay: 0.3s; }
+.drops i:nth-child(9) { left: 93%; animation-delay: 0.7s; }
+.drops i:nth-child(10) { left: 44%; animation-delay: 0.08s; }
+.drops i:nth-child(11) { left: 68%; animation-delay: 0.58s; }
+.drops i:nth-child(12) { left: 18%; animation-delay: 0.5s; }
 @keyframes rainFall { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: .9; } 100% { transform: translateY(36px); opacity: 0; } }
 .drops i.off { display: none; }
-@media (prefers-reduced-motion: reduce) { .head { transition: none; } .sun svg, .drops i { animation: none; } }
+.rain svg { filter: brightness(var(--cloudB, 1)); transition: filter .5s; }
+.sparks { position: absolute; inset: -14px -16px; z-index: 2; pointer-events: none; }
+.spark { position: absolute; width: 7px; height: 7px; opacity: 0; transform: scale(.4); transition: opacity .4s;
+  background: radial-gradient(circle, #fff 0 18%, #ffd34d 20% 45%, transparent 48%);
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%); }
+.spark.on { opacity: 1; animation: twinkle 1.4s ease-in-out infinite; }
+.spark:nth-child(1) { left: 0; top: 18%; animation-delay: 0s; }   .spark:nth-child(2) { right: 0; top: 10%; animation-delay: .5s; }
+.spark:nth-child(3) { left: 8%; top: 62%; animation-delay: .9s; } .spark:nth-child(4) { right: 6%; top: 58%; animation-delay: .25s; }
+.spark:nth-child(5) { left: 40%; top: -4%; animation-delay: .7s; } .spark:nth-child(6) { right: 30%; top: 80%; animation-delay: 1.1s; }
+@keyframes twinkle { 0%, 100% { transform: scale(.35) rotate(0deg); opacity: .3; } 50% { transform: scale(1.15) rotate(45deg); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .head { transition: none; } .sun svg, .drops i, .spark.on { animation: none; } }
 
 /* 카드: 그림자 없이 얇은 한 줄 테두리만 */
 .app { box-shadow: none; border: 1px solid #d9cce7; }
@@ -454,7 +474,7 @@ a.brand:hover, a.brand:hover i { color: #8660b2; }
     </div>
 
     <div class="card">
-      <div class="card-h"><span class="key-h">키<span class="head" id="head" aria-hidden="true"><span class="wx sun"><svg viewBox="-32 -32 64 64"><defs><radialGradient id="sunGlow"><stop offset="0" stop-color="#ffe27a"/><stop offset=".45" stop-color="#ffd34d" stop-opacity=".75"/><stop offset="1" stop-color="#ffd34d" stop-opacity="0"/></radialGradient></defs><circle r="30" fill="url(#sunGlow)"/><g class="rays" stroke="#ffc83d" stroke-width="2.6" stroke-linecap="round"><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(0)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(30)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(60)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(90)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(120)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(150)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(180)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(210)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(240)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(270)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(300)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(330)"/></g></svg></span><img id="headImg" alt="" src="data:image/webp;base64,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"><span class="wx rain"><svg viewBox="0 0 40 22"><path d="M9 20a7 7 0 0 1-1-13.9A9 9 0 0 1 25 4a7.5 7.5 0 0 1 7 8 5 5 0 0 1 0 8z" fill="#a99bbd"/><path d="M9 20a7 7 0 0 1-1-13.9A9 9 0 0 1 25 4" fill="none" stroke="#c6bbd6" stroke-width="1.6" stroke-linecap="round"/></svg><span class="drops"><i></i><i></i><i></i><i></i><i></i><i></i></span></span></span></span><button class="reset" id="keyReset" disabled title="원래 키로">↺ 원본</button></div>
+      <div class="card-h"><span class="key-h">키<span class="head" id="head" aria-hidden="true"><span class="sparks"><b class="spark"></b><b class="spark"></b><b class="spark"></b><b class="spark"></b><b class="spark"></b><b class="spark"></b></span><span class="wx sun"><svg viewBox="-32 -32 64 64"><defs><radialGradient id="sunGlow"><stop offset="0" stop-color="#ffe27a"/><stop offset=".45" stop-color="#ffd34d" stop-opacity=".75"/><stop offset="1" stop-color="#ffd34d" stop-opacity="0"/></radialGradient></defs><circle r="30" fill="url(#sunGlow)"/><g class="rays" stroke="#ffc83d" stroke-width="2.6" stroke-linecap="round"><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(0)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(30)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(60)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(90)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(120)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(150)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(180)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(210)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(240)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(270)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(300)"/><line x1="0" y1="-19" x2="0" y2="-28" transform="rotate(330)"/></g></svg></span><img id="headImg" alt="" src="data:image/webp;base64,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"><span class="wx rain"><svg viewBox="0 0 40 22"><path d="M9 20a7 7 0 0 1-1-13.9A9 9 0 0 1 25 4a7.5 7.5 0 0 1 7 8 5 5 0 0 1 0 8z" fill="#a99bbd"/><path d="M9 20a7 7 0 0 1-1-13.9A9 9 0 0 1 25 4" fill="none" stroke="#c6bbd6" stroke-width="1.6" stroke-linecap="round"/></svg><span class="drops"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></span></span></span><button class="reset" id="keyReset" disabled title="원래 키로">↺ 원본</button></div>
       <div class="val">
         <button class="step" id="keyDown" aria-label="반음 내리기">−</button>
         <span class="big-num keyval" id="keyVal">0</span>
@@ -2219,6 +2239,45 @@ var SoundTouch = class SoundTouch {
 	}
 };
 //#endregion
+//#region LHIMSHIFT player engine (워크릿과 메인 스레드가 같이 씀)
+// 원본 음원을 직접 읽으면서 SoundTouch로 템포(T)와 음높이(P)를 한 번에 처리한다.
+// 브라우저 <audio>의 속도 조절을 거치지 않아 스마트폰에서도 튀지 않는다.
+var LhimEngine = class {
+	constructor(sampleRate) {
+		this.sr = sampleRate; this.ch = null; this.len = 0; this.pos = 0; this.played = 0;
+		this.T = 1; this.P = 1; this.ended = false;
+		this.inBuf = new Float32Array(2048 * 2); this.outBuf = new Float32Array(2048 * 2);
+		this.fresh();
+	}
+	fresh() {                                    // 처리기 새로 (위치 이동 때 이전 소리 찌꺼기 제거)
+		this.st = new SoundTouch({ sampleRate: this.sr });
+		this.apply();
+	}
+	apply() {                                    // 이 SoundTouch 판은 음높이만 받으므로 내부 템포를 직접 맞춤
+		this.st.pitch = this.P;
+		this.st._tempo = this.T / this.P;
+		this.st.stretch.tempo = this.T / this.P;
+	}
+	load(chs) { this.ch = chs; this.len = chs[0].length; this.seek(0); }
+	seek(frame) { this.pos = Math.max(0, Math.min(this.len, frame | 0)); this.played = this.pos; this.ended = false; this.fresh(); }
+	setTempo(T) { this.T = T; this.apply(); }
+	setPitch(P) { this.P = P; this.apply(); }
+	render(L, R, n) {                            // n프레임 채우고 실제 채운 수를 돌려줌
+		const st = this.st, a = this.ch[0], b = this.ch[1] || a, CH = 1024;
+		while (st.outputBuffer.frameCount < n && this.pos < this.len) {
+			const k = Math.min(CH, this.len - this.pos), buf = this.inBuf;
+			for (let i = 0, j = this.pos; i < k; i++, j++) { buf[2 * i] = a[j]; buf[2 * i + 1] = b[j]; }
+			st.inputBuffer.putSamples(buf, 0, k); this.pos += k; st.process();
+		}
+		const m = Math.min(n, st.outputBuffer.frameCount);
+		if (m > 0) { st.outputBuffer.extract(this.outBuf, 0, m); st.outputBuffer.receive(m); }
+		for (let i = 0; i < n; i++) { L[i] = i < m ? this.outBuf[2 * i] : 0; R[i] = i < m ? this.outBuf[2 * i + 1] : 0; }
+		this.played = Math.min(this.len, this.played + m * this.T);   // 들려준 소리 = 원본의 어디까지인지
+		if (m < n && this.pos >= this.len) this.ended = true;
+		return m;
+	}
+};
+//#endregion
 //#region ../worklet-base/src/SoundTouchProcessorBase.ts
 /**
 * Abstract base class for all SoundTouchJS AudioWorklet processor implementations.
@@ -2555,6 +2614,35 @@ class LhimShiftLivePitch extends SoundTouchProcessor {
 }
 registerProcessor('lhimshift-live-pitch', LhimShiftLivePitch);
 
+// LHIMSHIFT 오디오 파일 재생기 (오디오 스레드에서 실행)
+class LhimPlayerProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.eng = new LhimEngine(sampleRate); this.playing = false; this.n = 0; this.dead = false;
+    this.port.onmessage = e => {
+      const m = e.data;
+      if (m.type === 'load') { this.eng.load(m.ch); this.playing = false; }
+      else if (m.type === 'play') this.playing = true;
+      else if (m.type === 'pause') this.playing = false;
+      else if (m.type === 'seek') this.eng.seek(Math.round(m.t * sampleRate));
+      else if (m.type === 'tempo') this.eng.setTempo(m.v);
+      else if (m.type === 'pitch') this.eng.setPitch(m.v);
+      else if (m.type === 'dispose') { this.dead = true; this.eng.ch = null; }
+    };
+  }
+  process(inputs, outputs) {
+    if (this.dead) return false;
+    const o = outputs[0], L = o[0], R = o[1] || o[0];
+    if (!this.playing || !this.eng.ch) { L.fill(0); if (R !== L) R.fill(0); return true; }
+    this.eng.render(L, R, L.length);
+    if (++this.n % 4 === 0 || this.eng.ended) this.port.postMessage({ t: this.eng.played / sampleRate, at: currentTime, ended: this.eng.ended });
+    if (this.eng.ended) this.playing = false;
+    return true;
+  }
+}
+registerProcessor('lhimshift-player', LhimPlayerProcessor);
+
+
 </script>
 <script>
 // ---------- MIDI 파서 ----------
@@ -2743,6 +2831,34 @@ function parseWaf(text) {
   return JSON.parse(body).zones;
 }
 
+// 반복 구간(루프) 이음새 보정
+// MP3로 압축된 음원은 풀 때 앞에 짧은 빈 구간이 붙어 반복 위치가 밀리고, 이음새에서 '틱' 튄다.
+// 템포를 느리게 하면 긴 음이 반복 구간을 여러 번 돌아 '치지직'으로 들림 → 샘플마다
+// ① 이음새 앞뒤 파형이 가장 잘 맞는 위치를 찾아 옮기고 ② 이음새에 8ms 크로스페이드를 넣는다.
+function fixLoop(z) {
+  if (!(z.loopStart > 1 && z.loopStart < z.loopEnd)) return;
+  const b = z.buffer, r = b.sampleRate / z.sampleRate, d = b.getChannelData(0);
+  const s0 = z.loopStart * r, e0 = z.loopEnd * r, L = 160;
+  let best = 0, bestErr = Infinity;
+  for (let off = -300; off <= 2600; off++) {
+    const s = Math.round(s0 + off), e = Math.round(e0 + off);
+    if (s < 0 || e + L >= d.length) continue;
+    let err = 0, en = 1e-12;
+    for (let i = 0; i < L; i += 2) { const a = d[s + i], c = d[e + i]; err += (a - c) * (a - c); en += a * a + c * c; }
+    err = err / en + Math.abs(off) * 1e-6;          // 비슷하면 덜 옮기는 쪽
+    if (err < bestErr) { bestErr = err; best = off; }
+  }
+  z.loopOff = best / b.sampleRate;
+  const s = Math.round(s0 + best), e = Math.round(e0 + best), N = Math.min(Math.round(b.sampleRate * 0.008), s);
+  for (let c = 0; c < b.numberOfChannels; c++) {
+    const x = b.getChannelData(c);
+    for (let i = 0; i < N; i++) {                    // 반복 끝 직전을 반복 시작 직전과 섞어, 끝→시작이 이어지게
+      const t = (i + 1) / N;
+      x[e - N + i] = x[e - N + i] * (1 - t) + x[s - N + i] * t;
+    }
+  }
+}
+
 function gmLoad(key) {
   if (!gmCache.has(key)) {
     const job = (async () => {
@@ -2762,7 +2878,9 @@ function gmLoad(key) {
         }
         delete z.file; delete z.sample;
       }));
-      return zones.filter(z => z.buffer);
+      const ok = zones.filter(z => z.buffer);
+      if (key[0] === 'p') ok.forEach(fixLoop);   // 악기 음원: 반복 구간 이음새 보정 (드럼은 반복 안 함)
+      return ok;
     })().catch(() => { gmCache.delete(key); return null; });   // 실패하면 다음 곡에서 다시 시도
     gmCache.set(key, job);
   }
@@ -2803,7 +2921,7 @@ function playSample(n, zones, when, dur) {
   const pr = Math.pow(2, (100 * note - base) / 1200);
   src.playbackRate.value = pr;
   const looped = !drum && z.loopStart > 1 && z.loopStart < z.loopEnd;
-  if (looped) { src.loop = true; src.loopStart = z.loopStart / z.sampleRate; src.loopEnd = z.loopEnd / z.sampleRate; }
+  if (looped) { const o = z.loopOff || 0; src.loop = true; src.loopStart = z.loopStart / z.sampleRate + o; src.loopEnd = z.loopEnd / z.sampleRate + o; }
 
   const peak = Math.pow(n.vel / 127, 1.5) * n.vol * 0.8;
   const g = ctx.createGain(), pan = ctx.createStereoPanner();
@@ -3082,12 +3200,12 @@ const tempoEl = $('tempo'), tempoNum = $('tempoNum');
 const LOOKAHEAD = 0.2;
 
 let song = null, playing = false, offset = 0, startCtx = 0, rate = 1, idx = 0, timer = null, seeking = false;
-let audioEl = null, audioUrl = null;
+let player = null;   // 오디오 파일 재생기 { node, audioGain, script?, eng?, t, at }
 const isAudio = () => song && song.kind === 'audio';
 const muted = new Set();
 
 const fmt = s => { s = Math.max(0, s); const m = Math.floor(s / 60); return m + ':' + String(Math.floor(s % 60)).padStart(2, '0'); };
-const curPos = () => isAudio() ? audioEl.currentTime : playing ? offset + (ctx.currentTime - startCtx) * rate : offset;
+const curPos = () => isAudio() ? playerPos() : playing ? offset + (ctx.currentTime - startCtx) * rate : offset;
 const lowerBound = t => { let lo = 0, hi = song.notes.length; while (lo < hi) { const m = (lo + hi) >> 1; if (song.notes[m].t < t) lo = m + 1; else hi = m; } return lo; };
 
 function schedule() {
@@ -3106,16 +3224,15 @@ function schedule() {
 
 async function play() {
   if (!song) return;
+  unlockAudioOutput();
   if (isAudio()) {
-    if (audioEl.ended) audioEl.currentTime = 0;
-    const el = audioEl;
-    try {
-      if (livePitch && ctx.state !== 'running') await ctx.resume();
-      if (el !== audioEl || !isAudio()) return;
-      await el.play();
-      if (el !== audioEl) return;
-      playing = !el.paused;
-    } catch (_) { if (el === audioEl) playing = false; }
+    if (!player) return;
+    if (ctx.state !== 'running') await ctx.resume();
+    if (!isAudio() || !player) return;
+    if (player.t >= song.duration - 0.05) playerSeek(0);
+    player.at = ctx.currentTime;
+    playerMsg({ type: 'play' });
+    playing = true;
     updateButtons(); return;
   }
   initAudio();
@@ -3136,7 +3253,7 @@ async function play() {
 
 function pause() {
   if (!playing) return;
-  if (isAudio()) { audioEl.pause(); playing = false; updateButtons(); return; }
+  if (isAudio()) { player.t = playerPos(); player.at = ctx.currentTime; playerMsg({ type: 'pause' }); playing = false; updateButtons(); return; }
   offset = curPos();
   playing = false;
   clearInterval(timer);
@@ -3146,7 +3263,7 @@ function pause() {
 
 function stop() {
   playing = false;
-  if (audioEl) { audioEl.pause(); audioEl.currentTime = 0; flushLivePitch(); }
+  if (player) { playerMsg({ type: 'pause' }); playerSeek(0); }
   clearInterval(timer);
   stopAllVoices();
   offset = 0;
@@ -3156,7 +3273,7 @@ function stop() {
 function seekTo(t) {
   if (!song) return;
   t = Math.min(Math.max(0, t), song.duration);
-  if (isAudio()) { audioEl.currentTime = t; flushLivePitch(); return; }
+  if (isAudio()) { playerSeek(t); return; }
   if (playing) {
     stopAllVoices();
     offset = t; startCtx = ctx.currentTime + 0.03; idx = lowerBound(t);
@@ -3164,7 +3281,7 @@ function seekTo(t) {
 }
 
 function setRate(r) {
-  if (isAudio()) { audioEl.playbackRate = r; rate = r; return; }
+  if (isAudio()) { if (player) { player.t = playerPos(); player.at = ctx.currentTime; playerMsg({ type: 'tempo', v: r }); } rate = r; return; }
   if (playing) { offset = curPos(); startCtx = ctx.currentTime; }
   rate = r;
 }
@@ -3571,120 +3688,6 @@ async function saveAs(fmt) {
   saving = false; updateButtons();
 }
 
-// ---------- Real-time playback pitch; offline export keeps its existing DSP ----------
-let livePitch = null, livePitchModule = null;
-// AudioWorklet을 못 쓰는 환경(보안 컨텍스트가 아닌 페이지 등)용: 같은 SoundTouch 엔진을 메인 스레드의 ScriptProcessor로 실시간 실행
-let SoundTouchMain = null;
-function soundTouchClass() {
-  if (!SoundTouchMain) {
-    const src = $('livePitchSource').textContent;
-    const core = src.slice(0, src.indexOf('//#region ../worklet-base'));   // 워크릿 전용 부분 앞까지 = DSP 코어
-    SoundTouchMain = new Function(core + '\nreturn SoundTouch;')();
-  }
-  return SoundTouchMain;
-}
-function setupScriptPitch(el) {
-  const ST = soundTouchClass();
-  const pipe = new ST({ sampleRate: ctx.sampleRate });
-  const N = 2048;
-  const node = ctx.createScriptProcessor(N, 2, 2);
-  const source = ctx.createMediaElementSource(el);
-  const inBuf = new Float32Array(N * 2), outBuf = new Float32Array(N * 2);
-  let wasShifted = false;
-  node.onaudioprocess = e => {
-    const ib = e.inputBuffer, ob = e.outputBuffer;
-    const inL = ib.getChannelData(0), inR = ib.numberOfChannels > 1 ? ib.getChannelData(1) : inL;
-    const oL = ob.getChannelData(0), oR = ob.getChannelData(1), n = inL.length;
-    if (keyShift === 0) {                 // 원래 키: 그대로 통과 (지연·왜곡 없음)
-      if (wasShifted) { pipe.clear(); wasShifted = false; }
-      oL.set(inL); oR.set(inR); return;
-    }
-    wasShifted = true;
-    pipe.pitch = Math.pow(2, keyShift / 12);
-    for (let i = 0; i < n; i++) { inBuf[i * 2] = inL[i]; inBuf[i * 2 + 1] = inR[i]; }
-    pipe.inputBuffer.putSamples(inBuf, 0, n);
-    pipe.process();
-    const k = Math.min(pipe.outputBuffer.frameCount, n);
-    if (k > 0) { pipe.outputBuffer.extract(outBuf, 0, k); pipe.outputBuffer.receive(k); }
-    for (let i = 0; i < n; i++) {
-      oL[i] = i < k ? outBuf[i * 2] : 0;
-      oR[i] = i < k ? outBuf[i * 2 + 1] : 0;
-    }
-  };
-  source.connect(node); node.connect(ctx.destination);
-  livePitch = { element: el, node, source, active: true, script: true, pipe };
-}
-
-function disposeLivePitch() {
-  if (!livePitch) return;
-  if (livePitch.script) {
-    livePitch.node.onaudioprocess = null;
-    livePitch.source.disconnect(); livePitch.node.disconnect(); livePitch.pipe.clear();
-    livePitch = null; return;
-  }
-  livePitch.node.onprocessorerror = null;
-  livePitch.source.disconnect(); livePitch.node.disconnect();
-  livePitch.node.port.postMessage('dispose'); livePitch.node.port.close();
-  livePitch = null;
-}
-function flushLivePitch() {
-  if (!livePitch || !livePitch.active) return;
-  if (livePitch.script) livePitch.pipe.clear();
-  else livePitch.node.port.postMessage('flush');
-}
-async function setupLivePitch(el, channels) {
-  if (!ctx.audioWorklet || typeof AudioWorkletNode === 'undefined') return;
-  let node = null, source = null;
-  try {
-    if (!livePitchModule) {
-      livePitchModule = (async () => {
-        const url = URL.createObjectURL(new Blob([$('livePitchSource').textContent], { type: 'application/javascript' }));
-        try { await ctx.audioWorklet.addModule(url); }
-        finally { URL.revokeObjectURL(url); }
-      })().catch(err => { livePitchModule = null; throw err; });
-    }
-    await livePitchModule;
-    if (el !== audioEl) return;
-    node = new AudioWorkletNode(ctx, 'lhimshift-live-pitch', {
-      numberOfInputs: 1, numberOfOutputs: 1,
-      outputChannelCount: [Math.max(1, Math.min(channels, 2))],
-      channelCount: Math.max(1, Math.min(channels, 2)), channelCountMode: 'explicit'
-    });
-    node.connect(ctx.destination);
-    source = ctx.createMediaElementSource(el);
-    source.connect(node);
-    livePitch = { element: el, node, source, active: true };
-    node.port.onmessage = () => {};
-    node.onprocessorerror = () => {
-      if (!livePitch || livePitch.node !== node) return;
-      livePitch.active = false;
-      source.disconnect(); node.disconnect(); source.connect(ctx.destination);
-      if (song && isAudio() && keyShift !== 0) renderKey();
-    };
-  } catch (_) {
-    if (node) { node.disconnect(); node.port.close(); }
-    // If routing has already changed, recreate native playback on a fresh element.
-    if (source && el === audioEl) {
-      source.disconnect();
-      const replacement = new Audio(el.src);
-      replacement.volume = el.volume;
-      replacement.preservesPitch = replacement.mozPreservesPitch = replacement.webkitPreservesPitch = true;
-      el.pause(); audioEl = replacement;
-    }
-  }
-}
-function applyLiveKey() {
-  // 워크릿이 없거나 준비에 실패했으면, 처음 키를 바꿀 때 ScriptProcessor 경로를 바로 만든다
-  if (!livePitch && audioEl && ctx) {
-    try { setupScriptPitch(audioEl); } catch (_) { livePitch = null; }
-  }
-  if (!livePitch || !livePitch.active || livePitch.element !== audioEl) return false;
-  if (livePitch.script) return true;      // 콜백이 keyShift를 직접 읽음
-  const parameter = livePitch.node.parameters.get('pitchSemitones');
-  parameter.setValueAtTime(keyShift, ctx.currentTime);
-  return true;
-}
-
 // ---------- 키 변경 ----------
 // MIDI: 음표 번호를 옮겨 바로 반영 (드럼 채널 제외)
 // 오디오: 지원 브라우저에서는 실시간 키 변경. 미지원 환경은 전체 변환으로 대체.
@@ -3707,46 +3710,13 @@ function setKey(k) {
   k = Math.max(-12, Math.min(12, k));
   if (k === keyShift) return;
   keyShift = k; updateKeyUI();
-  if (isAudio()) {
-    keyJob++; clearTimeout(keyTimer);
-    if (!applyLiveKey()) keyTimer = setTimeout(renderKey, 120);
-  }
+  if (isAudio()) playerMsg({ type: 'pitch', v: Math.pow(2, keyShift / 12) });   // 재생 중 바로 적용
 }
 
 function resetKey() {
-  keyJob++; clearTimeout(keyTimer); keyShift = 0; updateKeyUI();
+  keyJob++; clearTimeout(keyTimer); keyShift = 0; wxClear = true; updateKeyUI(); lastKey = 0;
 }
 
-async function renderKey() {
-  const job = ++keyJob, s = song, k = keyShift;
-  if (!s || !isAudio()) return;
-  const alive = () => job === keyJob && song === s;
-  const msg = t => { if (alive()) $('info').textContent = t; };
-  let url = s.origUrl;
-  if (k !== 0) {
-    try {
-      msg('키 변경 중… 0%');
-      const chs = await processAudio(s.ab, 1, k, x => msg(`키 변경 중… ${Math.round(x * 100)}%`), () => !alive());
-      url = URL.createObjectURL(encodeWav(chs, s.ab.sampleRate, 16));
-    } catch (err) {
-      if (err !== CANCEL) { msg('키 변경 실패: ' + err.message); setTimeout(() => msg(''), 3000); }
-      return;
-    }
-    if (!alive()) { URL.revokeObjectURL(url); return; }
-  }
-  const t = audioEl.currentTime, wasPlaying = playing;
-  if (s.keyUrl) URL.revokeObjectURL(s.keyUrl);
-  s.keyUrl = url === s.origUrl ? null : url;
-  playing = false;
-  audioEl.src = url;
-  await new Promise(r => audioEl.addEventListener('loadedmetadata', r, { once: true }));
-  if (!alive()) return;
-  audioEl.currentTime = t;
-  audioEl.defaultPlaybackRate = audioEl.playbackRate = rate;
-  audioEl.preservesPitch = audioEl.mozPreservesPitch = audioEl.webkitPreservesPitch = true;
-  msg('');
-  if (wasPlaying) play(); else updateButtons();
-}
 
 // ---------- 파일 로딩 ----------
 const CH_COLORS = Array.from({ length: 16 }, (_, i) => `hsl(${(i * 67 + 210) % 360} 70% 55%)`);
@@ -3774,14 +3744,93 @@ async function loadFile(file) {
   }
 }
 
-function unloadAudio() {
-  disposeLivePitch();
-  if (song && song.keyUrl) { URL.revokeObjectURL(song.keyUrl); song.keyUrl = null; }
-  if (audioEl) {
-    audioEl.onended = audioEl.onpause = audioEl.onseeking = null; // 늦게 도착하는 이벤트가 다음 곡 재생 상태를 건드리지 않도록
-    audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load(); audioEl = null;
+// ---------- 오디오 파일 재생기 ----------
+// 오디오 스레드(AudioWorklet)에서 SoundTouch가 원본을 직접 읽어 템포·키를 처리.
+// AudioWorklet을 못 쓰는 환경에서는 같은 엔진을 ScriptProcessor로 실행.
+let playerModule = null, EngineMain = null;
+function playerMsg(m) {
+  if (!player) return;
+  if (player.script) {
+    const e = player.eng;
+    if (m.type === 'play') player.run = true;
+    else if (m.type === 'pause') player.run = false;
+    else if (m.type === 'seek') e.seek(Math.round(m.t * ctx.sampleRate));
+    else if (m.type === 'tempo') e.setTempo(m.v);
+    else if (m.type === 'pitch') e.setPitch(m.v);
+  } else player.node.port.postMessage(m);
+}
+function playerSeek(t) { player.t = t; player.at = ctx.currentTime; playerMsg({ type: 'seek', t }); }
+function playerPos() {                     // 지금 들리는 위치 (출력 지연만큼 빼서 화면·까딱이 소리와 맞게)
+  if (!player) return 0;
+  if (!playing) return player.t;
+  const lat = (ctx.outputLatency || 0) + (ctx.baseLatency || 0);
+  return Math.max(0, Math.min(song.duration, player.t + Math.max(0, ctx.currentTime - player.at - lat) * rate));
+}
+function onPlayerPos(t, at, ended) {
+  if (!player) return;
+  player.t = t; player.at = at;
+  if (ended && playing) { playing = false; player.t = song.duration; updateButtons(); }
+}
+async function setupPlayer(ab) {
+  const chs = [];
+  for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chs.push(new Float32Array(ab.getChannelData(c)));
+  const audioGain = ctx.createGain(); audioGain.gain.value = outVol(); audioGain.connect(ctx.destination);
+  const init = p => { p.t = 0; p.at = ctx.currentTime; playerMsg({ type: 'tempo', v: rate }); playerMsg({ type: 'pitch', v: Math.pow(2, keyShift / 12) }); };
+  if (ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
+    try {
+      if (!playerModule) {
+        playerModule = (async () => {
+          const url = URL.createObjectURL(new Blob([$('livePitchSource').textContent], { type: 'application/javascript' }));
+          try { await ctx.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+        })().catch(err => { playerModule = null; throw err; });
+      }
+      await playerModule;
+      const node = new AudioWorkletNode(ctx, 'lhimshift-player', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+      node.connect(audioGain);
+      node.port.onmessage = e => { if (player && player.node === node) onPlayerPos(e.data.t, e.data.at, e.data.ended); };
+      node.port.postMessage({ type: 'load', ch: chs }, chs.map(c => c.buffer));
+      player = { node, audioGain }; init(player); return;
+    } catch (_) { /* 아래 ScriptProcessor로 */ }
   }
-  if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; }
+  if (!EngineMain) {
+    const src = $('livePitchSource').textContent;
+    const core = src.slice(0, src.indexOf('//#region ../worklet-base'));
+    EngineMain = new Function(core + '\nreturn LhimEngine;')();
+  }
+  const eng = new EngineMain(ctx.sampleRate); eng.load(chs);
+  const node = ctx.createScriptProcessor(2048, 0, 2);
+  const p = { node, audioGain, script: true, eng, run: false };
+  node.onaudioprocess = e => {
+    const L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1);
+    if (!p.run) { L.fill(0); R.fill(0); return; }
+    eng.render(L, R, L.length);
+    if (player === p) onPlayerPos(eng.played / ctx.sampleRate, ctx.currentTime, eng.ended);
+    if (eng.ended) p.run = false;
+  };
+  node.connect(audioGain);
+  player = p; init(player);
+}
+function disposePlayer() {
+  if (!player) return;
+  if (player.script) player.node.onaudioprocess = null;
+  else { player.node.port.postMessage({ type: 'dispose' }); player.node.port.onmessage = null; }
+  player.node.disconnect(); player.audioGain.disconnect();
+  player = null;
+}
+
+// 아이폰: 무음(진동) 모드에서도 소리가 나도록 오디오 세션을 '재생'으로
+let outputUnlocked = false;
+function unlockAudioOutput() {
+  if (outputUnlocked) return; outputUnlocked = true;
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
+  try {
+    const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=');
+    a.loop = true; a.volume = 0; a.setAttribute('playsinline', ''); a.play().catch(() => {});
+  } catch (_) {}
+}
+
+function unloadAudio() {
+  disposePlayer();
 }
 
 let loadSeq = 0;
@@ -3803,18 +3852,10 @@ async function loadAudio(file, buf, my) {
   const lufs = integratedLufs(ab);
   if (my !== loadSeq) return;
 
-  audioUrl = URL.createObjectURL(file);
-  audioEl = new Audio(audioUrl);
-  audioEl.preservesPitch = audioEl.mozPreservesPitch = audioEl.webkitPreservesPitch = true; // 템포만 바꾸고 음정은 유지
-  audioEl.volume = outVol();
-  await setupLivePitch(audioEl, ab.numberOfChannels);
-  if (my !== loadSeq) return;
-  const el = audioEl;
-  el.onseeking = flushLivePitch;
-  el.onended = () => { if (el === audioEl) { playing = false; updateButtons(); } };
-  el.onpause = () => { if (el === audioEl && playing) { playing = false; updateButtons(); } };
+  await setupPlayer(ab);
+  if (my !== loadSeq) { disposePlayer(); return; }
 
-  song = { kind: 'audio', name: file.name, ab, origUrl: audioUrl, keyUrl: null, duration: ab.duration, tempoMap: [{ t: 0, bpm: tempo.bpm }], detectedBpm: tempo.bpm, beatOffset: tempo.offset, peaks, notes: [], usedCh: [] };
+  song = { kind: 'audio', name: file.name, ab, duration: ab.duration, tempoMap: [{ t: 0, bpm: tempo.bpm }], detectedBpm: tempo.bpm, beatOffset: tempo.offset, peaks, notes: [], usedCh: [] };
   $('info').textContent = '';
   seekEl.max = song.duration;
   showLufs(lufs);
@@ -3881,7 +3922,7 @@ $('saveMenu').onclick = e => {
 document.addEventListener('click', e => { if (!e.target.closest('.save-wrap')) $('saveMenu').hidden = true; });
 $('keyUp').onclick = () => setKey(keyShift + 1);
 $('keyDown').onclick = () => setKey(keyShift - 1);
-$('keyReset').onclick = () => setKey(0);
+$('keyReset').onclick = () => { wxClear = true; setKey(0); updateKeyUI(); };
 $('keySlider').oninput = () => setKey(+$('keySlider').value);
 $('stage').onclick = () => { if (!song) fileInput.click(); };
 fileInput.onchange = () => { loadFile(fileInput.files[0]); fileInput.value = ''; };
@@ -3898,7 +3939,7 @@ const SPK_ON = '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"
 const SPK_OFF = '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9l6 6M22 9l-6 6"/>';
 function applyVol() {
   if (master) master.gain.setTargetAtTime(outVol(), ctx.currentTime, 0.02);
-  if (audioEl) audioEl.volume = outVol();
+  if (player) player.audioGain.gain.setTargetAtTime(outVol(), ctx.currentTime, 0.02);
   const b = $('muteBtn');
   b.classList.toggle('on', volMuted);
   b.querySelector('svg').innerHTML = volMuted ? SPK_OFF : SPK_ON;
@@ -4018,14 +4059,29 @@ function drawWave(W, H, pos, pps, headX, css) {
 
 // ---------- 키 카드의 얼굴: 올리면 떠오르며 햇살, 내리면 가라앉으며 먹구름·비 ----------
 // 얼굴 높이: 한 반음에 0.6px (±12면 ±7px) / 날씨 세기: ±1~4, ±5~8, ±9~12 세 단계
+// 날씨: 마지막으로 누른 방향으로 정하고, 세기는 키 위치로 한 칸마다 조금씩
+//  올리는 중(+) → 해: −12에서 +12로 갈수록 점점 크고 밝게 떠오르고, 높은 키에선 반짝이
+//  내리는 중(−) → 구름·비: +12에서 −12로 갈수록 구름이 커지고 짙어지며 빗방울이 늘어남
+//  0을 지나도 끊기지 않음. '↺ 원본'이나 새 파일을 열 때만 맑게 초기화
+let wxDir = 0, lastKey = 0, wxClear = false;
 function setFace(k) {
-  const h = $('head'), lvl = Math.min(3, Math.ceil(Math.abs(k) / 4));
-  h.style.setProperty('--lift', (-k * 0.8) + 'px');   // ±12면 약 ±10px
-  h.style.setProperty('--sunO', k > 0 ? (0.45 + lvl * 0.18).toFixed(2) : 0);
-  h.style.setProperty('--sunS', k > 0 ? (0.5 + lvl * 0.12).toFixed(2) : 0.5);   // 최대 약 60px (카드 밖으로 넘치지 않게)
-  h.style.setProperty('--rainO', k < 0 ? (0.7 + lvl * 0.1).toFixed(2) : 0);
-  h.style.setProperty('--rainS', k < 0 ? (0.8 + lvl * 0.1).toFixed(2) : 0.8);
-  h.querySelectorAll('.drops i').forEach((d, i) => d.classList.toggle('off', i >= lvl * 2));   // 빗방울 2·4·6개
+  const h = $('head');
+  if (wxClear) { wxDir = 0; wxClear = false; }
+  else if (k !== lastKey) wxDir = k > lastKey ? 1 : -1;
+  lastKey = k;
+  const f = wxDir > 0 ? (k + 12) / 24 : wxDir < 0 ? (12 - k) / 24 : 0;   // 0(약) ~ 1(최대)
+  h.style.setProperty('--lift', (-k * 0.8) + 'px');   // 얼굴 높이는 키 값 (±12면 약 ±10px)
+  const sun = wxDir > 0, rain = wxDir < 0;
+  h.style.setProperty('--sunO', sun ? (0.3 + 0.7 * f).toFixed(2) : 0);
+  h.style.setProperty('--sunS', sun ? (0.42 + 0.58 * f).toFixed(2) : 0.4);
+  h.style.setProperty('--sunY', sun ? (16 - 22 * f).toFixed(1) + 'px' : '18px');   // 올라갈수록 더 높이 떠오름
+  h.querySelectorAll('.spark').forEach((el, i) => el.classList.toggle('on', sun && f > 0.45 + i * 0.09));   // 밝을수록 반짝이 늘어남
+  h.style.setProperty('--rainO', rain ? (0.55 + 0.45 * f).toFixed(2) : 0);
+  h.style.setProperty('--rainS', rain ? (0.7 + 0.6 * f).toFixed(2) : 0.7);
+  h.style.setProperty('--rainY', rain ? '0px' : '-8px');
+  h.style.setProperty('--cloudB', rain ? (1.15 - 0.55 * f).toFixed(2) : 1);   // 내려갈수록 먹구름
+  const drops = rain ? Math.max(1, Math.round(12 * f)) : 0;
+  h.querySelectorAll('.drops i').forEach((d, i) => d.classList.toggle('off', i >= drops));
 }
 
 // ---------- 얼굴은 평소엔 숨어 있다가, 그 카드를 누르면 나타나고 잠시 뒤 스르륵 사라짐 ----------
