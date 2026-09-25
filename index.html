@@ -298,7 +298,7 @@ a.brand { display:inline-flex; align-items:baseline; gap:0; font-size:36px; line
 .t { font-size:13px; color:#655a73; }
 .card { padding:17px 22px 23px; border:1px solid #e5d9ee; }
 .card-h { font-size:14px; font-weight:650; color:#584766; }
-.reset { font-size:12px; color:#655471; padding:5px 7px; }
+.reset { font-size:12px; color:#655471; padding:5px 7px; white-space:nowrap; }
 .big-num,#tempoNum { font-size:48px; font-weight:550; }
 .num:disabled { opacity:1; -webkit-text-fill-color:var(--text); }
 .unit { font-size:13px; color:#655a73; font-weight:550; }
@@ -356,8 +356,8 @@ a.brand:hover, a.brand:hover i { color: #8660b2; }
 }
 
 /* 키 카드의 얼굴: 키를 올리면 둥실 떠오르며 햇살, 내리면 가라앉으며 먹구름과 비 (얼굴은 그대로) */
-.key-h { display: inline-flex; align-items: center; }
-.head { position: relative; display: inline-block; width: 50px; height: 60px; margin: -12px 0 -10px 10px;
+.key-h { position: relative; display: inline-flex; align-items: center; white-space: nowrap; }
+.head { position: absolute; left: 100%; top: 50%; display: block; width: 50px; height: 60px; margin: -30px 0 0 8px;
   transform: translateY(var(--lift, 0px)); opacity: 0;
   transition: transform .5s cubic-bezier(.34, 1.4, .5, 1); }
 .head.show { opacity: 1; animation: faceIn .25s ease; }                 /* 누르면 바로 나타나고 */
@@ -4175,6 +4175,16 @@ function syncNod(force) {
 setInterval(() => syncNod(false), 250);
 setInterval(() => { if (playing) syncNod(true); }, 3000);
 syncNod(true);
+
+// ---------- 카카오톡에서 열었을 때만: 작은 'Safari로 열기' 링크 ----------
+// 카카오톡 내장 브라우저는 대화방으로 돌아가면 닫혀서 프로그램이 꺼짐 → 바깥 브라우저에서 열어 두면 오가도 유지됨
+if (/KAKAOTALK/i.test(navigator.userAgent)) {
+  const go = document.createElement('a');
+  go.textContent = '새 창으로 열기 ↗';
+  go.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);   // 누를 때만 이동
+  go.style.cssText = 'display:block;width:max-content;margin:-8px 0 10px auto;font-size:12px;font-weight:600;color:#7d6a95;text-decoration:none;';
+  $('drop').insertBefore(go, $('drop').firstChild);
+}
 
 // ---------- 점검 화면 (주소 끝에 ?debug 를 붙이면 표시) ----------
 // 폰에서 소리가 안 날 때 원인을 찾기 위한 정보: 브라우저, 오디오 상태, 재생 방식, 오류
