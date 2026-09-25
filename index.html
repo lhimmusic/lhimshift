@@ -404,10 +404,33 @@ a.brand:hover, a.brand:hover i { color: #8660b2; }
 
 
 /* 빈 화면 음표: 글꼴과 무관한 그림, 줄 간격 고정 (폰에서 위로 붙지 않게) */
-.empty-mark { display: flex; line-height: 0; margin: 0 0 6px; }
+.empty-mark { display: flex; line-height: 0; margin: 0 0 2px; }
 .empty-mark svg { width: 30px; height: 30px; display: block; }
-.stage.compact .empty-mark { display: none; }          /* 화면이 낮을 땐 음표를 빼고 글만 가운데 */
-.stage.compact .empty-copy { gap: 5px; }
+.stage.compact .empty-copy { gap: 3px; }              /* 화면이 낮으면 음표를 작게 (빼지는 않음) */
+.stage.compact .empty-mark svg { width: 22px; height: 22px; }
+.stage.compact .empty-copy strong { font-size: 15px; }
+/* 문구: 마우스 쓰는 기기는 '끌어다 놓거나 열어서', 터치 기기(폰·태블릿)는 끌어다 놓기가 없으니 '열어서'만 */
+.empty-copy strong span { font: inherit; color: inherit; }
+.empty-copy .tap-txt { display: none; }
+@media (hover: none) and (pointer: coarse) { .empty-copy .drag-txt { display: none; } .empty-copy .tap-txt { display: inline; } }
+
+/* 세로가 모자란 화면: 글자는 그대로 두고 여백부터 단계적으로 줄인다 (JS가 dense1 → dense2 순서로 붙임) */
+html.dense1 body { padding-top: 10px; padding-bottom: 10px; }
+html.dense1 .app { padding-top: 18px; padding-bottom: 18px; }
+html.dense1 .top { margin-bottom: 12px; min-height: 0; }
+html.dense1 .file-row { margin-bottom: 8px; }
+html.dense1 .seekrow { margin: 10px 0 12px; }
+html.dense1 .transport { margin-bottom: 14px; row-gap: 8px; }
+html.dense1 .card { padding-top: 10px; padding-bottom: 14px; }
+html.dense1 .val { height: 92px; margin: 2px 0 10px; }
+html.dense2 body { padding-top: 6px; padding-bottom: 6px; }
+html.dense2 .app { padding-top: 14px; padding-bottom: 14px; }
+html.dense2 .top { margin-bottom: 8px; }
+html.dense2 .seekrow { margin: 6px 0 8px; }
+html.dense2 #playBtn { width: 48px; height: 48px; }
+html.dense2 .transport { margin-bottom: 10px; row-gap: 4px; }
+html.dense2 .val { height: 80px; margin: 0 0 8px; }
+html.dense2 .big-num, html.dense2 #tempoNum { font-size: 30px; }
 
 /* 카드: 그림자 없이 얇은 한 줄 테두리만 */
 .app { box-shadow: none; border: 1px solid #d9cce7; }
@@ -444,7 +467,7 @@ a.brand:hover, a.brand:hover i { color: #8660b2; }
   <section class="stage empty" id="stage">
     <canvas id="roll"></canvas>
     <div class="msg" id="info" role="status" aria-live="polite"></div>
-    <div class="empty-copy"><div class="empty-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true"><path d="M9 3.5v11.1A3.6 3.6 0 1 0 11 18V8.2l8-1.9v6.3A3.6 3.6 0 1 0 21 16V1.8z"/></svg></div><strong>파일을 끌어다 놓거나 열어서 불러오세요</strong><span>오디오 · MIDI 파일</span></div>
+    <div class="empty-copy"><div class="empty-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true"><path d="M9 3.5v11.1A3.6 3.6 0 1 0 11 18V8.2l8-1.9v6.3A3.6 3.6 0 1 0 21 16V1.8z"/></svg></div><strong><span class="drag-txt">파일을 끌어다 놓거나 열어서 불러오세요</span><span class="tap-txt">파일을 열어서 불러오세요</span></strong><span>오디오 · MIDI 파일</span></div>
   </section>
 
   <div class="seekrow">
@@ -4331,25 +4354,41 @@ if (/[?&]demo\b/.test(location.search)) {
 }
 
 // ---------- 화면 높이에 맞추기 ----------
-// 어떤 화면에서도 아래가 잘리지 않게: ① 파형 화면 높이를 줄이고(최소 110px) ② 그래도 넘치면 전체를 비율대로 축소
+// 어떤 화면에서도 스크롤 없이 한 화면에 딱 맞게:
+// ① 폰에선 남는 세로 공간만큼 파형 화면을 키우고 ② 모자라면 파형 화면을 줄이고(최소 96px)
+// ③ 그래도 넘치면 여백을 단계적으로 줄이고 ④ 마지막 수단으로만 전체를 비율대로 축소
 const appEl = $('drop');
 let fitQueued = false;
+const MIN_STAGE = 96, MAX_STAGE_PHONE = 300;
 function fitToScreen() {
   fitQueued = false;
   appEl.style.zoom = '';
-  canvas.style.height = '';
-  const bs = getComputedStyle(document.body);
-  const avail = window.innerHeight - parseFloat(bs.paddingTop) - parseFloat(bs.paddingBottom);
-  let over = appEl.offsetHeight - avail;
-  if (over > 0) {
-    const cut = Math.min(over, canvas.offsetHeight - 110);
-    if (cut > 0) { canvas.style.height = (canvas.offsetHeight - cut) + 'px'; over -= cut; }
+  const root = document.documentElement;
+  const screenH = window.visualViewport ? Math.min(window.visualViewport.height, window.innerHeight) : window.innerHeight;
+  const phone = window.innerWidth <= 600;
+  let over = 0;
+  for (const level of ['', 'dense1', 'dense2']) {
+    root.classList.remove('dense1', 'dense2');
+    if (level) root.classList.add(level);
+    canvas.style.height = '';
+    const bs = getComputedStyle(document.body);
+    const avail = screenH - parseFloat(bs.paddingTop) - parseFloat(bs.paddingBottom);
+    over = appEl.offsetHeight - avail;
+    const h = canvas.offsetHeight;
+    if (over <= 0) {
+      if (phone && !level) canvas.style.height = Math.min(MAX_STAGE_PHONE, h - over) + 'px';   // 남는 공간 채우기
+      over = 0; break;
+    }
+    const cut = Math.min(over, h - MIN_STAGE);
+    if (cut > 0) { canvas.style.height = (h - cut) + 'px'; over -= cut; }
+    if (over <= 0) break;
   }
-  if (over > 0) appEl.style.zoom = Math.max(0.5, avail / appEl.offsetHeight).toFixed(3);
-  $('stage').classList.toggle('compact', canvas.offsetHeight < 150);
+  if (over > 0) appEl.style.zoom = Math.max(0.6, 1 - over / appEl.offsetHeight).toFixed(3);
+  $('stage').classList.toggle('compact', canvas.offsetHeight < 140);
 }
 function queueFit() { if (!fitQueued) { fitQueued = true; requestAnimationFrame(fitToScreen); } }
 window.addEventListener('resize', queueFit);
+window.visualViewport?.addEventListener('resize', queueFit);
 // 채널 칩·LUFS 표시처럼 내용이 늘거나 줄 때도 다시 맞춤
 const fitWatch = new MutationObserver(queueFit);
 fitWatch.observe(appEl, { subtree: true, attributes: true, attributeFilter: ['hidden'] });   // 표시/숨김
