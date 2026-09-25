@@ -4148,6 +4148,57 @@ function nodTempoHead() {
 }
 nodTempoHead();
 
+// ---------- 카카오톡 안에서 열면 기본 브라우저(Safari 등)로 넘기기 ----------
+// 카카오톡 내장 브라우저는 웹 오디오 소리가 막히는 경우가 많다 → 카카오톡이 지원하는 방식으로 바깥 브라우저에서 다시 연다
+if (/KAKAOTALK/i.test(navigator.userAgent) && !/[?&]inapp\b/.test(location.search)) {
+  location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+  setTimeout(() => {                          // 넘어가지 않았으면 안내
+    if (document.visibilityState === 'visible' && !song)
+      $('info').textContent = '카카오톡 안에서는 소리가 나지 않을 수 있어요. 오른쪽 아래 ⋯ 를 눌러 “다른 브라우저로 열기”를 선택해 주세요.';
+  }, 1500);
+}
+
+// ---------- 점검 화면 (주소 끝에 ?debug 를 붙이면 표시) ----------
+// 폰에서 소리가 안 날 때 원인을 찾기 위한 정보: 브라우저, 오디오 상태, 재생 방식, 오류
+if (/[?&]debug\b/.test(location.search)) {
+  const box = document.createElement('pre');
+  box.style.cssText = 'position:fixed;left:6px;right:6px;bottom:6px;z-index:9999;margin:0;padding:8px 10px;max-height:45vh;overflow:auto;' +
+    'font:11px/1.45 -apple-system,system-ui,sans-serif;white-space:pre-wrap;word-break:break-all;background:rgba(20,16,30,.88);color:#e9e3f5;border-radius:10px;';
+  document.body.appendChild(box);
+  const errs = [];
+  window.addEventListener('error', e => errs.push('오류: ' + e.message + ' @' + (e.lineno || '')));
+  window.addEventListener('unhandledrejection', e => errs.push('거부: ' + (e.reason && e.reason.message || e.reason)));
+  setInterval(() => {
+    box.textContent = [
+      '브라우저: ' + navigator.userAgent,
+      '보안환경: ' + isSecureContext + ' | AudioWorklet 지원: ' + !!(window.AudioWorkletNode),
+      '오디오: ' + (ctx ? ctx.state + ' / ' + ctx.sampleRate + 'Hz / 지연 ' + Math.round(((ctx.outputLatency || 0) + (ctx.baseLatency || 0)) * 1000) + 'ms' : '아직 없음'),
+      '오디오세션: ' + (navigator.audioSession ? navigator.audioSession.type : '미지원') + ' | 잠금해제: ' + outputUnlocked,
+      '파일: ' + (song ? (song.kind || 'midi') + ' ' + fmt(song.duration) : '없음') + ' | 재생기: ' + (player ? (player.script ? 'ScriptProcessor' : 'AudioWorklet') : '없음'),
+      '재생중: ' + playing + ' | 위치: ' + (song ? curPos().toFixed(2) : '-') + ' | 템포비율: ' + rate.toFixed(2) + ' | 키: ' + keyShift,
+      '안내문구: ' + ($('info').textContent || '(없음)'),
+      ...errs.slice(-5)
+    ].join('\n');
+  }, 500);
+}
+
+// ---------- 시험용 소리 (주소에 ?demo 를 붙이면, 처음 터치할 때 드럼+음 20초짜리를 불러옴) ----------
+if (/[?&]demo\b/.test(location.search)) {
+  const loadDemo = () => {
+    window.removeEventListener('pointerup', loadDemo, true);
+    const sr = 44100, secs = 20, n = sr * secs, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const w = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, n * 2, true);
+    const x = new Float32Array(n); for (let i = 0; i < n; i++) x[i] = Math.sin(2 * Math.PI * 330 * i / sr) * 0.08;
+    for (let b = 0; 0.37 + b * 0.6 < secs - 0.3; b++) { const s0 = Math.floor((0.37 + b * 0.6) * sr); for (let i = 0; i < sr * 0.15; i++) { const t = i / sr; x[s0 + i] += Math.sin(2 * Math.PI * 60 * t) * Math.exp(-t * 14) * 0.6; } }
+    for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x[i])) * 32767, true);
+    loadFile(new File([buf], 'demo_100bpm.wav', { type: 'audio/wav' }));
+  };
+  window.addEventListener('pointerup', loadDemo, true);
+}
+
 // ---------- 화면 높이에 맞추기 ----------
 // 어떤 화면에서도 아래가 잘리지 않게: ① 파형 화면 높이를 줄이고(최소 110px) ② 그래도 넘치면 전체를 비율대로 축소
 const appEl = $('drop');
