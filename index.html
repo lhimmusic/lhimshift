@@ -4176,21 +4176,6 @@ setInterval(() => syncNod(false), 250);
 setInterval(() => { if (playing) syncNod(true); }, 3000);
 syncNod(true);
 
-// ---------- 카카오톡 안에서 열었을 때: 자동으로 넘기지 않고, 안내와 'Safari로 열기' 버튼만 ----------
-// (자동으로 넘기면 카카오톡이 처리 못 할 때 페이지가 멈출 수 있음 → 사용자가 누를 때만 이동)
-if (/KAKAOTALK/i.test(navigator.userAgent)) {
-  const bar = document.createElement('div');
-  bar.style.cssText = 'display:flex;align-items:center;gap:10px;justify-content:space-between;margin:0 0 14px;padding:10px 12px;' +
-    'border-radius:10px;background:#f3eef9;color:#533775;font-size:13px;line-height:1.4;';
-  bar.innerHTML = '<span>카카오톡 안에서는 소리가 나지 않을 수 있어요.</span>';
-  const go = document.createElement('a');
-  go.textContent = 'Safari로 열기';
-  go.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
-  go.style.cssText = 'flex:none;padding:7px 10px;border-radius:8px;background:#533775;color:#fff;text-decoration:none;font-weight:600;';
-  bar.appendChild(go);
-  $('drop').insertBefore(bar, $('drop').firstChild);
-}
-
 // ---------- 점검 화면 (주소 끝에 ?debug 를 붙이면 표시) ----------
 // 폰에서 소리가 안 날 때 원인을 찾기 위한 정보: 브라우저, 오디오 상태, 재생 방식, 오류
 if (/[?&]debug\b/.test(location.search)) {
