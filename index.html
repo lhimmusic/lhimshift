@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RETEMPO</title>
+<title>LHIMSHIFT</title>
 <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAEwklEQVR4nMVXTWxVRRT+zszce9+7ff1TWylYaGpbIwjGn4gYDWJi1IULFnQhMcaNC3YmJi4JS42JOxZujIm6KFEXxkRNFIyKaAzEagyWQilawAL66M+9792fGXPmvtbyeD+tfYknmdx358093znfOXPmDAHA2NiYHB0dTd88+FHXxs4tBwzMPq3NiDZpHgBhfWIEyVAImiDQkYvXpw+/fGhvcQmTxvaNydEjo+k7rx3fnXPzbznKHYmTCEkawxiDVggRQUkHjnIRJ9FEKQpfeuHVR75ibOvde29896ij/C+JyAnLQUqAIP6qhWJYAJ33fGmMieMkeGL/K7u+obcPHu1yCv4pz80PlMpBQkSqlcA1DElynq/KUXg+XgjuE8rPH/BzhYGwFKR1wanJWIMwBmMxJmMrEJ6Lk8gIUZty5s3o+rlgPyKCENkTvL5J7jAWYzK2ItBQksa1fTGAcgSkYu11xBgkiUYcpUhjDSEFHFc2M0JwkjM2M+DVWiwEIQxj3L+zH1sf6oPWxs7VwEcSpwjmI1y9tIjp09dw+cIclCMtK/XssJgEr3HCVRhwc42XeXmFtg4PPZvacfeDGzD58xX88PkUdGpAvNEakCEaaq54yAqYgUaKWBiQPRva3oPde0egTfNvFFYjzLzOzJ39fR4zU0U4jrQAHBa/3cWGLR3wC25mbGqwabALwzt6cfrkZXh5p24iq1UZsBQzEC5OFXHisynk25yMFTtL8HyFx54dQv9wd2U9MLSjB2d+mq2fCFhFCG6y2BEWPOc7yPvZM9emEJUSnDx2IYu7ILsj27tz9n+ea5kBppIPTOnyMzVwXYlSkCAqJxachbcvjwp5rTEAlB0u1SMMYhQ6XbtjlhjXiUaa6MygOiSoteLrxFgvlaQsB4ggFeH2/g48/PSgTUpLuSDM/V1CKYht2Mx6DaAKr4P33IZb+9psxWO3eJ5zoqvHr1oPTP16zTKgXFk3EdWqXa/EkBOLRy3JMAyEJMz+MY+JU39mIWlwliisUzgMWR5U7CTCzNkivv540oadq3ejY0GtFTBYiLBQLNvfXHgKXV52YtrSDvz4xTTGj8/Y8iwlNQRfkwGWRkE498tVnPj0nK1ujivw1P5t6O71MyYEYfNdt+DM+Gwl+5s3CwJrFAaRjoDjSZRLKY5+8BvCxTjLfm3Qe0c7HudzwJ4LzRsWgf8gS8XI9STm/irh2IcTyx7rVKNvoBO7nhm01ZHL9LoMoBXJtfKdhY3gWF+avo5vPzlr/+PtyQYO39uLB/ZsRjmMG4ZCNDMgTYztduJyknU9yY1ZxUbwmTA5fsWeBXZtlFrvt+3ciDu399j3ekbQu69/XyJBNbsinuJE4+5mSZI4a79q6eO489F8AwDxzmEWqoCJOLHLysBMOtLdapvEKkb4o8ybNEsm3mri33BUC5dk3qa2AKyo/1yYqm1V0qFIlycFDN53lEvati81KOKOV5FVws9G8WQNS+tWPm9C18YwJmOLJAgPB6WF8/mcvbEktTWvGM3ENF7PGIzFmIwtXjy0p0ikn+frEt9YtDFpdotqrbBO1s0YjMWYjC34gsh3tLC8+KTW6UQh3y5dx2vp1ZB1sU7WzRiMxZjLl9P/83r+D9SrfcC5zGO+AAAAAElFTkSuQmCC">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
@@ -328,6 +328,18 @@ input[type=range]:disabled::-moz-range-thumb { border-color:#9985b2; background:
  .btn { height:38px; font-size:13px; }
 }
 
+/* 로고: 버튼·카드 제목과 균형 맞춘 크기 (가운데 템포·키 숫자가 주인공) */
+a.brand { font-size: 26px; font-weight: 700; letter-spacing: .08em; line-height: 1.2; }
+.brand::after { display: none; }   /* 로고 끝 장식 점 없음 */
+.top { margin-bottom: 24px; }
+@media (max-width: 600px) { a.brand { font-size: 23px; letter-spacing: .06em; } .top { margin-bottom: 20px; } }
+@media (max-width: 480px) {
+  a.brand { font-size: 20px; letter-spacing: .05em; }
+  .top { gap: 10px; }
+  .actions { flex-basis: auto; margin-left: auto; gap: 6px; }   /* 로고와 버튼을 한 줄에, 정말 좁을 때만 줄바꿈 */
+  .btn { height: 36px; padding: 0 10px; font-size: 13px; gap: 5px; }
+}
+
 /* 카드: 그림자 없이 얇은 한 줄 테두리만 */
 .app { box-shadow: none; border: 1px solid #d9cce7; }
 
@@ -339,7 +351,7 @@ input[type=range]:disabled::-moz-range-thumb { border-color:#9985b2; background:
 <body>
 <main class="app" id="drop">
   <header class="top">
-    <a class="brand" href="https://www.instagram.com/lhimmusic" target="_blank" rel="noopener noreferrer" aria-label="RETEMPO — 인스타그램 새 창으로 열기">RE<i>TEMPO</i></a>
+    <a class="brand" href="https://www.instagram.com/lhimmusic" target="_blank" rel="noopener noreferrer" aria-label="LHIMSHIFT — 인스타그램 새 창으로 열기">LHIM<i>SHIFT</i></a>
     
     <div class="actions">
       <button class="btn" id="openBtn">
@@ -2484,8 +2496,8 @@ registerProcessor(PROCESSOR_NAME, SoundTouchProcessor);
 //#endregion
 
 
-// RETEMPO lifecycle adapter for the unmodified SoundTouchJS processor above.
-class RetempoLivePitch extends SoundTouchProcessor {
+// LHIMSHIFT lifecycle adapter for the unmodified SoundTouchJS processor above.
+class LhimShiftLivePitch extends SoundTouchProcessor {
   constructor(options) {
     super(options);
     this.disposed = false;
@@ -2501,7 +2513,7 @@ class RetempoLivePitch extends SoundTouchProcessor {
     return super.process(inputs, outputs, parameters);
   }
 }
-registerProcessor('retempo-live-pitch', RetempoLivePitch);
+registerProcessor('lhimshift-live-pitch', LhimShiftLivePitch);
 
 </script>
 <script>
@@ -3586,7 +3598,7 @@ async function setupLivePitch(el, channels) {
     }
     await livePitchModule;
     if (el !== audioEl) return;
-    node = new AudioWorkletNode(ctx, 'retempo-live-pitch', {
+    node = new AudioWorkletNode(ctx, 'lhimshift-live-pitch', {
       numberOfInputs: 1, numberOfOutputs: 1,
       outputChannelCount: [Math.max(1, Math.min(channels, 2))],
       channelCount: Math.max(1, Math.min(channels, 2)), channelCountMode: 'explicit'
