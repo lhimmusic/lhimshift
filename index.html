@@ -2835,7 +2835,9 @@ const voices = new Set();
 
 function initAudio() {
   if (ctx) return;
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  // 'playback': 소리 출력 버퍼를 넉넉하게. 템포·키 엔진이 가끔 몰아서 계산해도(수 ms) 소리가 끊기지 않게
+  const AC = window.AudioContext || window.webkitAudioContext;
+  try { ctx = new AC({ latencyHint: 'playback' }); } catch (_) { ctx = new AC(); }
   comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -14; comp.ratio.value = 4;
   master = ctx.createGain(); master.gain.value = outVol();
