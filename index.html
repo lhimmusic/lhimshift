@@ -2908,6 +2908,9 @@ const TIMBRE = [
 let ctx = null, master, comp, chGain = [], noiseBuf;
 const voices = new Set();
 
+// 화면 기록(녹화) 소리 시험용: ?stream → 최종 소리를 미디어 재생 경로(<audio>)로 / ?nosilent → 무음 반복 소리 끄기
+const OUT_STREAM = /[?&]stream\b/.test(location.search), NO_SILENT = /[?&]nosilent\b/.test(location.search);
+let outBus = null, streamEl = null;
 function initAudio() {
   if (ctx) return;
   // 'playback': 소리 출력 버퍼를 넉넉하게. 템포·키 엔진이 가끔 몰아서 계산해도(수 ms) 소리가 끊기지 않게
@@ -2916,7 +2919,12 @@ function initAudio() {
   comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -14; comp.ratio.value = 4;
   master = ctx.createGain(); master.gain.value = outVol();
-  master.connect(comp); comp.connect(ctx.destination);
+  outBus = ctx.createGain();
+  if (OUT_STREAM && ctx.createMediaStreamDestination) {
+    const msd = ctx.createMediaStreamDestination(); outBus.connect(msd);
+    streamEl = new Audio(); streamEl.setAttribute('playsinline', ''); streamEl.srcObject = msd.stream;
+  } else outBus.connect(ctx.destination);
+  master.connect(comp); comp.connect(outBus);
   for (let i = 0; i < 16; i++) {
     const g = ctx.createGain(); g.gain.value = muted.has(i) ? 0 : 1; g.connect(master); chGain.push(g);
   }
@@ -3971,7 +3979,7 @@ function onPlayerPos(t, at, ended) {
 async function setupPlayer(ab) {
   const chs = [];
   for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chs.push(new Float32Array(ab.getChannelData(c)));
-  const audioGain = ctx.createGain(); audioGain.gain.value = outVol(); audioGain.connect(ctx.destination);
+  const audioGain = ctx.createGain(); audioGain.gain.value = outVol(); audioGain.connect(outBus || ctx.destination);
   const init = p => { p.t = 0; p.at = ctx.currentTime; playerMsg({ type: 'tempo', v: rate }); playerMsg({ type: 'pitch', v: Math.pow(2, keyShift / 12) }); };
   if (ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
     try {
@@ -4050,7 +4058,9 @@ function silentWavUrl() {                  // 0.5초짜리 진짜 무음 WAV (�
 }
 function unlockAudioOutput() {
   if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+  if (streamEl && streamEl.paused) streamEl.play().catch(() => {});
   if (outputUnlocked) return; outputUnlocked = true;
+  if (OUT_STREAM || NO_SILENT) { try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {} return; }
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
   try {
     const a = new Audio(silentWavUrl());
@@ -4434,6 +4444,7 @@ if (/[?&]debug\b/.test(location.search)) {
       '보안환경: ' + isSecureContext + ' | AudioWorklet 지원: ' + !!(window.AudioWorkletNode),
       '오디오: ' + (ctx ? ctx.state + ' / ' + ctx.sampleRate + 'Hz / 지연 ' + Math.round(((ctx.outputLatency || 0) + (ctx.baseLatency || 0)) * 1000) + 'ms' : '아직 없음'),
       '오디오세션: ' + (navigator.audioSession ? navigator.audioSession.type : '미지원') + ' | 잠금해제: ' + outputUnlocked,
+      '출력: ' + (streamEl ? '미디어 재생 경로(' + (streamEl.paused ? '멈춤' : '재생') + ')' : '웹 오디오 기본') + ' | 무음반복: ' + (OUT_STREAM || NO_SILENT ? '끔' : '켬'),
       '파일: ' + (song ? (song.kind || 'midi') + ' ' + fmt(song.duration) : '없음') + ' | 재생기: ' + (player ? (player.worker ? '워커+큐(끊김 ' + (player.under || 0) + ')' : player.script ? 'ScriptProcessor' : 'AudioWorklet') : '없음'),
       '재생중: ' + playing + ' | 위치: ' + (song ? curPos().toFixed(2) : '-') + ' | 템포비율: ' + rate.toFixed(3) + ' | 키: ' + keyShift,
       '템포얼굴: ' + ($('tempoHead').classList.contains('show') ? '보임' : '숨김') + ' | 까딱: ' + (nodAnim ? nodAnim.playState + ' ' + Math.round(nodAnim.effect.getTiming().duration) + 'ms' : '없음') + ' | 기울기: ' + getComputedStyle($('tempoHead').firstElementChild).transform + ' | 박: ' + (song && playing ? (beatPosition() || 0).toFixed(2) : '-'),
