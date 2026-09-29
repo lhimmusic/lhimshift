@@ -2675,7 +2675,82 @@ class LhimPlayerProcessor extends AudioWorkletProcessor {
 }
 registerProcessor('lhimshift-player', LhimPlayerProcessor);
 
-
+// LHIMSHIFT 오디오 파일 재생기 (워커가 미리 만든 소리를 복사만 함 → 캡처 같은 순간적인 부하에도 끊기지 않음)
+class LhimQueueProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.q = []; this.qi = 0; this.gen = 0; this.used = 0; this.pos = 0;
+    this.playing = false; this.ended = false; this.dead = false; this.n = 0; this.wp = null; this.under = 0;
+    this.port.onmessage = e => {
+      const m = e.data;
+      if (m.type === 'port') {
+        this.wp = m.port;
+        this.wp.onmessage = ev => {
+          const c = ev.data;
+          if (c.gen > this.gen) { this.gen = c.gen; this.q = []; this.qi = 0; this.used = 0; this.ended = false; }
+          if (c.gen === this.gen) this.q.push(c);
+        };
+      }
+      else if (m.type === 'play') this.playing = true;
+      else if (m.type === 'pause') this.playing = false;
+      else if (m.type === 'seek') {
+        if (m.gen > this.gen) { this.gen = m.gen; this.q = []; this.qi = 0; this.used = 0; }
+        this.pos = m.t * sampleRate; this.ended = false;
+      }
+      else if (m.type === 'dispose') { this.dead = true; this.q = []; if (this.wp) this.wp.close(); }
+    };
+  }
+  process(inputs, outputs) {
+    if (this.dead) return false;
+    const o = outputs[0], L = o[0], R = o[1] || o[0], n = L.length;
+    if (!this.playing) { L.fill(0); if (R !== L) R.fill(0); return true; }
+    let k = 0;
+    while (k < n && this.q.length) {
+      const c = this.q[0], take = Math.min(n - k, c.n - this.qi);
+      L.set(c.L.subarray(this.qi, this.qi + take), k);
+      if (R !== L) R.set(c.R.subarray(this.qi, this.qi + take), k);
+      k += take; this.qi += take; this.pos = c.src + this.qi * c.rate;
+      if (this.qi >= c.n) {
+        this.used += c.size; this.q.shift(); this.qi = 0;
+        if (c.ended) { this.ended = true; this.q = []; break; }
+      }
+    }
+    if (k < n) { L.fill(0, k); if (R !== L) R.fill(0, k); if (!this.ended) this.under++; }
+    if (++this.n % 4 === 0 || this.ended) {
+      this.port.postMessage({ t: this.pos / sampleRate, at: currentTime, ended: this.ended, under: this.under });
+      if (this.wp) this.wp.postMessage({ gen: this.gen, used: this.used });
+    }
+    if (this.ended) this.playing = false;
+    return true;
+  }
+}
+registerProcessor('lhimshift-queue', LhimQueueProcessor);
+</script>
+<script id="engineWorkerGlue" type="text/plain">
+// 워커: 템포·키 처리를 오디오 스레드 밖에서 약 0.25초 앞서 미리 만들어 보냄
+let eng = null, port = null, gen = 0, made = 0, used = 0, ended = false, TARGET = 12000;
+const CH = 1024;
+onmessage = e => {
+  const m = e.data;
+  if (m.type === 'init') { eng = new LhimEngine(m.sr); TARGET = Math.round(m.sr * 0.25); port = m.port; port.onmessage = onUse; }
+  else if (m.type === 'load') { eng.setTempo(m.T); eng.setPitch(m.P); eng.load(m.ch); start(m.gen); }
+  else if (m.type === 'seek') { eng.seek(Math.round(m.t * eng.sr)); start(m.gen); }
+  else if (m.type === 'tempo') eng.setTempo(m.v);
+  else if (m.type === 'pitch') eng.setPitch(m.v);
+  else if (m.type === 'dispose') { eng = null; if (port) port.close(); close(); }
+};
+function start(g) { gen = g; made = 0; used = 0; ended = false; pump(); }
+function onUse(e) { const m = e.data; if (m.gen !== gen) return; used = m.used; pump(); }
+function pump() {
+  if (!eng || !eng.ch) return;
+  while (!ended && made - used < TARGET) {
+    const L = new Float32Array(CH), R = new Float32Array(CH);
+    const src = eng.played, rate = eng.T;
+    const got = eng.render(L, R, CH);
+    ended = eng.ended; made += CH;
+    port.postMessage({ gen, L, R, n: ended ? got : CH, size: CH, src, rate, ended }, [L.buffer, R.buffer]);
+  }
+}
 </script>
 <script>
 // ---------- 예전 페이지를 보고 있으면 자동으로 최신 버전 열기 ----------
@@ -3860,8 +3935,18 @@ async function loadFile(file) {
 // 오디오 스레드(AudioWorklet)에서 SoundTouch가 원본을 직접 읽어 템포·키를 처리.
 // AudioWorklet을 못 쓰는 환경에서는 같은 엔진을 ScriptProcessor로 실행.
 let playerModule = null, EngineMain = null;
+let playerGen = 0;
 function playerMsg(m) {
   if (!player) return;
+  if (player.worker) {                          // 워커(계산) + 오디오 스레드(복사)
+    if (m.type === 'play' || m.type === 'pause') player.node.port.postMessage(m);
+    else if (m.type === 'seek') { const gen = ++playerGen; player.node.port.postMessage({ type: 'seek', t: m.t, gen }); player.worker.postMessage({ type: 'seek', t: m.t, gen }); }
+    else if (m.type === 'tempo' || m.type === 'pitch') {
+      player.worker.postMessage(m);
+      if (!playing) playerMsg({ type: 'seek', t: player.t });   // 멈춰 있을 땐 미리 만든 소리를 새로 (다시 재생할 때 바로 반영)
+    }
+    return;
+  }
   if (player.script) {
     const e = player.eng;
     if (m.type === 'play') player.run = true;
@@ -3897,6 +3982,25 @@ async function setupPlayer(ab) {
         })().catch(err => { playerModule = null; throw err; });
       }
       await playerModule;
+      if (typeof Worker !== 'undefined' && typeof MessageChannel !== 'undefined') {
+        try {
+          const src = $('livePitchSource').textContent;
+          const core = src.slice(0, src.indexOf('//#region ../worklet-base'));
+          const wurl = URL.createObjectURL(new Blob([core + '\n' + $('engineWorkerGlue').textContent], { type: 'application/javascript' }));
+          const worker = new Worker(wurl); URL.revokeObjectURL(wurl);
+          const node = new AudioWorkletNode(ctx, 'lhimshift-queue', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+          const mc = new MessageChannel();
+          node.port.postMessage({ type: 'port', port: mc.port2 }, [mc.port2]);
+          worker.postMessage({ type: 'init', sr: ctx.sampleRate, port: mc.port1 }, [mc.port1]);
+          node.connect(audioGain);
+          node.port.onmessage = e => { if (player && player.node === node) { player.under = e.data.under; onPlayerPos(e.data.t, e.data.at, e.data.ended); } };
+          const gen = ++playerGen;
+          node.port.postMessage({ type: 'seek', t: 0, gen });
+          worker.postMessage({ type: 'load', ch: chs, gen, T: rate, P: Math.pow(2, keyShift / 12) }, chs.map(c => c.buffer));
+          player = { node, audioGain, worker, t: 0, at: ctx.currentTime };
+          return;
+        } catch (_) { /* 아래 기존 방식으로 */ }
+      }
       const node = new AudioWorkletNode(ctx, 'lhimshift-player', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(audioGain);
       node.port.onmessage = e => { if (player && player.node === node) onPlayerPos(e.data.t, e.data.at, e.data.ended); };
@@ -3926,6 +4030,7 @@ function disposePlayer() {
   if (!player) return;
   if (player.script) player.node.onaudioprocess = null;
   else { player.node.port.postMessage({ type: 'dispose' }); player.node.port.onmessage = null; }
+  if (player.worker) { player.worker.postMessage({ type: 'dispose' }); setTimeout(w => w.terminate(), 500, player.worker); }
   player.node.disconnect(); player.audioGain.disconnect();
   player = null;
 }
@@ -4329,7 +4434,7 @@ if (/[?&]debug\b/.test(location.search)) {
       '보안환경: ' + isSecureContext + ' | AudioWorklet 지원: ' + !!(window.AudioWorkletNode),
       '오디오: ' + (ctx ? ctx.state + ' / ' + ctx.sampleRate + 'Hz / 지연 ' + Math.round(((ctx.outputLatency || 0) + (ctx.baseLatency || 0)) * 1000) + 'ms' : '아직 없음'),
       '오디오세션: ' + (navigator.audioSession ? navigator.audioSession.type : '미지원') + ' | 잠금해제: ' + outputUnlocked,
-      '파일: ' + (song ? (song.kind || 'midi') + ' ' + fmt(song.duration) : '없음') + ' | 재생기: ' + (player ? (player.script ? 'ScriptProcessor' : 'AudioWorklet') : '없음'),
+      '파일: ' + (song ? (song.kind || 'midi') + ' ' + fmt(song.duration) : '없음') + ' | 재생기: ' + (player ? (player.worker ? '워커+큐(끊김 ' + (player.under || 0) + ')' : player.script ? 'ScriptProcessor' : 'AudioWorklet') : '없음'),
       '재생중: ' + playing + ' | 위치: ' + (song ? curPos().toFixed(2) : '-') + ' | 템포비율: ' + rate.toFixed(3) + ' | 키: ' + keyShift,
       '템포얼굴: ' + ($('tempoHead').classList.contains('show') ? '보임' : '숨김') + ' | 까딱: ' + (nodAnim ? nodAnim.playState + ' ' + Math.round(nodAnim.effect.getTiming().duration) + 'ms' : '없음') + ' | 기울기: ' + getComputedStyle($('tempoHead').firstElementChild).transform + ' | 박: ' + (song && playing ? (beatPosition() || 0).toFixed(2) : '-'),
       '안내문구: ' + ($('info').textContent || '(없음)'),
