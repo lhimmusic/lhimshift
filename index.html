@@ -2910,6 +2910,9 @@ const voices = new Set();
 
 // 화면 기록(녹화) 소리 시험용: ?stream → 최종 소리를 미디어 재생 경로(<audio>)로 / ?nosilent → 무음 반복 소리 끄기
 const OUT_STREAM = /[?&]stream\b/.test(location.search), NO_SILENT = /[?&]nosilent\b/.test(location.search);
+// ?media → 오디오 파일을 브라우저 기본 재생기(<audio>)로 (템포는 음높이 유지 속도조절, 키는 아직 안 됨)
+const MEDIA_MODE = /[?&]media\b/.test(location.search);
+let mediaEl = null;
 let outBus = null, streamEl = null;
 function initAudio() {
   if (ctx) return;
@@ -3946,6 +3949,14 @@ let playerModule = null, EngineMain = null;
 let playerGen = 0;
 function playerMsg(m) {
   if (!player) return;
+  if (player.media) {
+    const el = player.media;
+    if (m.type === 'play') el.play().catch(() => {});
+    else if (m.type === 'pause') el.pause();
+    else if (m.type === 'seek') el.currentTime = m.t;
+    else if (m.type === 'tempo') { el.playbackRate = m.v; el.preservesPitch = true; el.webkitPreservesPitch = true; }
+    return;
+  }
   if (player.worker) {                          // 워커(계산) + 오디오 스레드(복사)
     if (m.type === 'play' || m.type === 'pause') player.node.port.postMessage(m);
     else if (m.type === 'seek') { const gen = ++playerGen; player.node.port.postMessage({ type: 'seek', t: m.t, gen }); player.worker.postMessage({ type: 'seek', t: m.t, gen }); }
@@ -3967,6 +3978,7 @@ function playerMsg(m) {
 function playerSeek(t) { player.t = t; player.at = ctx.currentTime; playerMsg({ type: 'seek', t }); }
 function playerPos() {                     // 지금 들리는 위치 (출력 지연만큼 빼서 화면·까딱이 소리와 맞게)
   if (!player) return 0;
+  if (player.media) return player.media.currentTime;
   if (!playing) return player.t;
   const lat = (ctx.outputLatency || 0) + (ctx.baseLatency || 0);
   return Math.max(0, Math.min(song.duration, player.t + Math.max(0, ctx.currentTime - player.at - lat) * rate));
@@ -3976,7 +3988,17 @@ function onPlayerPos(t, at, ended) {
   player.t = t; player.at = at;
   if (ended && playing) { playing = false; player.t = song.duration; updateButtons(); }
 }
-async function setupPlayer(ab) {
+async function setupPlayer(ab, file) {
+  if (MEDIA_MODE && file) {
+    const el = mediaEl || (mediaEl = new Audio());
+    el.setAttribute('playsinline', ''); el.loop = false; el.preload = 'auto';
+    el.src = URL.createObjectURL(file);
+    el.preservesPitch = true; el.webkitPreservesPitch = true; el.mozPreservesPitch = true;
+    el.playbackRate = rate; el.volume = Math.min(1, outVol());
+    el.onended = () => { if (player && player.media === el) onPlayerPos(song ? song.duration : el.duration, ctx.currentTime, true); };
+    player = { media: el, t: 0, at: ctx.currentTime };
+    return;
+  }
   const chs = [];
   for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chs.push(new Float32Array(ab.getChannelData(c)));
   const audioGain = ctx.createGain(); audioGain.gain.value = outVol(); audioGain.connect(outBus || ctx.destination);
@@ -4036,6 +4058,7 @@ async function setupPlayer(ab) {
 }
 function disposePlayer() {
   if (!player) return;
+  if (player.media) { const el = player.media; el.pause(); el.onended = null; if (el.src.startsWith('blob:')) URL.revokeObjectURL(el.src); el.removeAttribute('src'); el.load(); player = null; return; }
   if (player.script) player.node.onaudioprocess = null;
   else { player.node.port.postMessage({ type: 'dispose' }); player.node.port.onmessage = null; }
   if (player.worker) { player.worker.postMessage({ type: 'dispose' }); setTimeout(w => w.terminate(), 500, player.worker); }
@@ -4060,6 +4083,11 @@ function unlockAudioOutput() {
   if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
   if (streamEl && streamEl.paused) streamEl.play().catch(() => {});
   if (outputUnlocked) return; outputUnlocked = true;
+  if (MEDIA_MODE) {
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
+    try { mediaEl = mediaEl || new Audio(); mediaEl.setAttribute('playsinline', ''); if (!mediaEl.src) { mediaEl.src = silentWavUrl(); mediaEl.play().then(() => { if (!player) mediaEl.pause(); }).catch(() => { outputUnlocked = false; }); } } catch (_) {}
+    return;
+  }
   if (OUT_STREAM || NO_SILENT) { try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {} return; }
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
   try {
@@ -4085,7 +4113,7 @@ async function loadAudio(file, buf, my) {
   showLufs();
   updateButtons();
   initAudio();
-  const breathe = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));   // 화면이 한 번 그려지게
+  const breathe = () => new Promise(r => { let done = false; const go = () => { if (!done) { done = true; setTimeout(r, 0); } }; requestAnimationFrame(go); setTimeout(go, 50); });   // 화면이 한 번 그려지게 (탭이 가려져 있어도 멈추지 않게)
   await breathe();
   let ab;
   try { ab = await ctx.decodeAudioData(buf); }
@@ -4099,7 +4127,7 @@ async function loadAudio(file, buf, my) {
   const peaks = computePeaks(ab);
   if (my !== loadSeq) return;
 
-  try { await setupPlayer(ab); }
+  try { await setupPlayer(ab, file); }
   catch (err) { if (my === loadSeq) $('info').textContent = '재생 준비 실패: ' + (err && err.message || err); return; }
   if (my !== loadSeq) { disposePlayer(); return; }
 
@@ -4189,7 +4217,8 @@ const SPK_ON = '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"
 const SPK_OFF = '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9l6 6M22 9l-6 6"/>';
 function applyVol() {
   if (master) master.gain.setTargetAtTime(outVol(), ctx.currentTime, 0.02);
-  if (player) player.audioGain.gain.setTargetAtTime(outVol(), ctx.currentTime, 0.02);
+  if (player && player.media) player.media.volume = Math.min(1, outVol());
+  else if (player) player.audioGain.gain.setTargetAtTime(outVol(), ctx.currentTime, 0.02);
   const b = $('muteBtn');
   b.classList.toggle('on', volMuted);
   b.querySelector('svg').innerHTML = volMuted ? SPK_OFF : SPK_ON;
@@ -4445,7 +4474,7 @@ if (/[?&]debug\b/.test(location.search)) {
       '오디오: ' + (ctx ? ctx.state + ' / ' + ctx.sampleRate + 'Hz / 지연 ' + Math.round(((ctx.outputLatency || 0) + (ctx.baseLatency || 0)) * 1000) + 'ms' : '아직 없음'),
       '오디오세션: ' + (navigator.audioSession ? navigator.audioSession.type : '미지원') + ' | 잠금해제: ' + outputUnlocked,
       '출력: ' + (streamEl ? '미디어 재생 경로(' + (streamEl.paused ? '멈춤' : '재생') + ')' : '웹 오디오 기본') + ' | 무음반복: ' + (OUT_STREAM || NO_SILENT ? '끔' : '켬'),
-      '파일: ' + (song ? (song.kind || 'midi') + ' ' + fmt(song.duration) : '없음') + ' | 재생기: ' + (player ? (player.worker ? '워커+큐(끊김 ' + (player.under || 0) + ')' : player.script ? 'ScriptProcessor' : 'AudioWorklet') : '없음'),
+      '파일: ' + (song ? (song.kind || 'midi') + ' ' + fmt(song.duration) : '없음') + ' | 재생기: ' + (player ? (player.media ? '기본 재생기(<audio>) 속도 ' + player.media.playbackRate.toFixed(2) + (player.media.paused ? ' 멈춤' : ' 재생') : player.worker ? '워커+큐(끊김 ' + (player.under || 0) + ')' : player.script ? 'ScriptProcessor' : 'AudioWorklet') : '없음'),
       '재생중: ' + playing + ' | 위치: ' + (song ? curPos().toFixed(2) : '-') + ' | 템포비율: ' + rate.toFixed(3) + ' | 키: ' + keyShift,
       '템포얼굴: ' + ($('tempoHead').classList.contains('show') ? '보임' : '숨김') + ' | 까딱: ' + (nodAnim ? nodAnim.playState + ' ' + Math.round(nodAnim.effect.getTiming().duration) + 'ms' : '없음') + ' | 기울기: ' + getComputedStyle($('tempoHead').firstElementChild).transform + ' | 박: ' + (song && playing ? (beatPosition() || 0).toFixed(2) : '-'),
       '안내문구: ' + ($('info').textContent || '(없음)'),
