@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>녹화 소리 시험</title>
+<style>
+  :root { --bg: #f6f2fb; --card: #fff; --text: #2e2639; --muted: #6b6178; --accent: #8660b2; --line: #ddd0ec; }
+  body { margin: 0; padding: 20px 16px 40px; background: var(--bg); color: var(--text); font: 16px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  input[type=file] { width: 100%; font-size: 15px; }
+  button { display: block; width: 100%; text-align: left; border: 1px solid var(--line); background: #fff; color: var(--text);
+    border-radius: 12px; padding: 12px 14px; margin: 8px 0 0; font: 600 16px/1.35 -apple-system, system-ui, sans-serif; }
+  button small { display: block; font-weight: 400; font-size: 13px; color: var(--muted); }
+  button.on { border-color: var(--accent); background: #efe6f8; }
+  #stop { text-align: center; background: var(--accent); color: #fff; border: 0; }
+  #status { font: 13px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <h1>녹화 소리 시험</h1>
+  <p>LHIMSHIFT 화면 기록 문제를 찾기 위한 임시 페이지예요. 파일을 고른 뒤 버튼을 하나씩 눌러 재생하면서 화면 기록을 해 보세요.</p>
+  <div class="card">
+    <input type="file" id="file" accept="audio/*,.mp3,.wav,.m4a">
+  </div>
+  <div class="card">
+    <button data-mode="A">A. 기본 재생기<small>오디오 세션 설정 없음</small></button>
+    <button data-mode="B">B. 기본 재생기 + 세션 '재생'<small>LHIMSHIFT가 쓰는 설정</small></button>
+    <button data-mode="C">C. 웹 오디오<small>오디오 세션 설정 없음</small></button>
+    <button data-mode="D">D. 웹 오디오 + 세션 '재생'<small>지금 LHIMSHIFT와 같은 방식</small></button>
+    <button id="stop">정지</button>
+  </div>
+  <div class="card"><div id="status">파일을 먼저 골라 주세요.</div></div>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let file = null, url = null, el = null, ctx = null, src = null, buf = null, mode = '-';
+function setSession(type) {
+  try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (_) {}
+}
+function show(extra) {
+  $('status').textContent = [
+    '파일: ' + (file ? file.name : '없음'),
+    '지금 방식: ' + mode,
+    '오디오 세션: ' + (navigator.audioSession ? navigator.audioSession.type : '지원 안 함'),
+    '웹 오디오: ' + (ctx ? ctx.state + ' / ' + ctx.sampleRate + 'Hz' : '사용 안 함'),
+    extra || '',
+  ].join('\n');
+}
+function stopAll() {
+  if (el) { el.pause(); }
+  if (src) { try { src.stop(); } catch (_) {} src.disconnect(); src = null; }
+  document.querySelectorAll('button[data-mode]').forEach(b => b.classList.remove('on'));
+  mode = '-';
+}
+$('file').onchange = e => {
+  stopAll();
+  file = e.target.files[0] || null; buf = null;
+  if (url) URL.revokeObjectURL(url);
+  url = file ? URL.createObjectURL(file) : null;
+  show(file ? '버튼을 눌러 재생하세요.' : '');
+};
+document.querySelectorAll('button[data-mode]').forEach(b => b.onclick = async () => {
+  if (!file) { show('파일을 먼저 골라 주세요.'); return; }
+  stopAll();
+  const m = b.dataset.mode; mode = b.firstChild.textContent.trim();
+  b.classList.add('on');
+  setSession(m === 'B' || m === 'D' ? 'playback' : 'auto');
+  try {
+    if (m === 'A' || m === 'B') {
+      if (!el) { el = new Audio(); el.setAttribute('playsinline', ''); }
+      if (el.src !== url) el.src = url;
+      el.currentTime = 0;
+      await el.play();
+    } else {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      await ctx.resume();
+      if (!buf) { show('파일 읽는 중…'); buf = await ctx.decodeAudioData(await file.arrayBuffer()); }
+      src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start();
+    }
+    show('재생 중. 이제 화면 기록을 해 보세요.');
+  } catch (err) { show('재생 실패: ' + (err && err.message || err)); }
+});
+$('stop').onclick = () => { stopAll(); show('정지'); };
+show();
+</script>
+</body>
+</html>
