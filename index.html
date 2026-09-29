@@ -2675,82 +2675,7 @@ class LhimPlayerProcessor extends AudioWorkletProcessor {
 }
 registerProcessor('lhimshift-player', LhimPlayerProcessor);
 
-// LHIMSHIFT 오디오 파일 재생기 (워커가 미리 만든 소리를 복사만 함 → 캡처 같은 순간적인 부하에도 끊기지 않음)
-class LhimQueueProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.q = []; this.qi = 0; this.gen = 0; this.used = 0; this.pos = 0;
-    this.playing = false; this.ended = false; this.dead = false; this.n = 0; this.wp = null; this.under = 0;
-    this.port.onmessage = e => {
-      const m = e.data;
-      if (m.type === 'port') {
-        this.wp = m.port;
-        this.wp.onmessage = ev => {
-          const c = ev.data;
-          if (c.gen > this.gen) { this.gen = c.gen; this.q = []; this.qi = 0; this.used = 0; this.ended = false; }
-          if (c.gen === this.gen) this.q.push(c);
-        };
-      }
-      else if (m.type === 'play') this.playing = true;
-      else if (m.type === 'pause') this.playing = false;
-      else if (m.type === 'seek') {
-        if (m.gen > this.gen) { this.gen = m.gen; this.q = []; this.qi = 0; this.used = 0; }
-        this.pos = m.t * sampleRate; this.ended = false;
-      }
-      else if (m.type === 'dispose') { this.dead = true; this.q = []; if (this.wp) this.wp.close(); }
-    };
-  }
-  process(inputs, outputs) {
-    if (this.dead) return false;
-    const o = outputs[0], L = o[0], R = o[1] || o[0], n = L.length;
-    if (!this.playing) { L.fill(0); if (R !== L) R.fill(0); return true; }
-    let k = 0;
-    while (k < n && this.q.length) {
-      const c = this.q[0], take = Math.min(n - k, c.n - this.qi);
-      L.set(c.L.subarray(this.qi, this.qi + take), k);
-      if (R !== L) R.set(c.R.subarray(this.qi, this.qi + take), k);
-      k += take; this.qi += take; this.pos = c.src + this.qi * c.rate;
-      if (this.qi >= c.n) {
-        this.used += c.size; this.q.shift(); this.qi = 0;
-        if (c.ended) { this.ended = true; this.q = []; break; }
-      }
-    }
-    if (k < n) { L.fill(0, k); if (R !== L) R.fill(0, k); if (!this.ended) this.under++; }
-    if (++this.n % 4 === 0 || this.ended) {
-      this.port.postMessage({ t: this.pos / sampleRate, at: currentTime, ended: this.ended, under: this.under });
-      if (this.wp) this.wp.postMessage({ gen: this.gen, used: this.used });
-    }
-    if (this.ended) this.playing = false;
-    return true;
-  }
-}
-registerProcessor('lhimshift-queue', LhimQueueProcessor);
-</script>
-<script id="engineWorkerGlue" type="text/plain">
-// 워커: 템포·키 처리를 오디오 스레드 밖에서 약 0.25초 앞서 미리 만들어 보냄
-let eng = null, port = null, gen = 0, made = 0, used = 0, ended = false, TARGET = 12000;
-const CH = 1024;
-onmessage = e => {
-  const m = e.data;
-  if (m.type === 'init') { eng = new LhimEngine(m.sr); TARGET = Math.round(m.sr * 0.25); port = m.port; port.onmessage = onUse; }
-  else if (m.type === 'load') { eng.setTempo(m.T); eng.setPitch(m.P); eng.load(m.ch); start(m.gen); }
-  else if (m.type === 'seek') { eng.seek(Math.round(m.t * eng.sr)); start(m.gen); }
-  else if (m.type === 'tempo') eng.setTempo(m.v);
-  else if (m.type === 'pitch') eng.setPitch(m.v);
-  else if (m.type === 'dispose') { eng = null; if (port) port.close(); close(); }
-};
-function start(g) { gen = g; made = 0; used = 0; ended = false; pump(); }
-function onUse(e) { const m = e.data; if (m.gen !== gen) return; used = m.used; pump(); }
-function pump() {
-  if (!eng || !eng.ch) return;
-  while (!ended && made - used < TARGET) {
-    const L = new Float32Array(CH), R = new Float32Array(CH);
-    const src = eng.played, rate = eng.T;
-    const got = eng.render(L, R, CH);
-    ended = eng.ended; made += CH;
-    port.postMessage({ gen, L, R, n: ended ? got : CH, size: CH, src, rate, ended }, [L.buffer, R.buffer]);
-  }
-}
+
 </script>
 <script>
 // ---------- 예전 페이지를 보고 있으면 자동으로 최신 버전 열기 ----------
@@ -2908,12 +2833,6 @@ const TIMBRE = [
 let ctx = null, master, comp, chGain = [], noiseBuf;
 const voices = new Set();
 
-// 화면 기록(녹화) 소리 시험용: ?stream → 최종 소리를 미디어 재생 경로(<audio>)로 / ?nosilent → 무음 반복 소리 끄기
-const OUT_STREAM = /[?&]stream\b/.test(location.search), NO_SILENT = /[?&]nosilent\b/.test(location.search);
-// ?media → 오디오 파일을 브라우저 기본 재생기(<audio>)로 (템포는 음높이 유지 속도조절, 키는 아직 안 됨)
-const MEDIA_MODE = /[?&]media\b/.test(location.search);
-let mediaEl = null;
-let outBus = null, streamEl = null;
 function initAudio() {
   if (ctx) return;
   // 'playback': 소리 출력 버퍼를 넉넉하게. 템포·키 엔진이 가끔 몰아서 계산해도(수 ms) 소리가 끊기지 않게
@@ -2922,12 +2841,7 @@ function initAudio() {
   comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -14; comp.ratio.value = 4;
   master = ctx.createGain(); master.gain.value = outVol();
-  outBus = ctx.createGain();
-  if (OUT_STREAM && ctx.createMediaStreamDestination) {
-    const msd = ctx.createMediaStreamDestination(); outBus.connect(msd);
-    streamEl = new Audio(); streamEl.setAttribute('playsinline', ''); streamEl.srcObject = msd.stream;
-  } else outBus.connect(ctx.destination);
-  master.connect(comp); comp.connect(outBus);
+  master.connect(comp); comp.connect(ctx.destination);
   for (let i = 0; i < 16; i++) {
     const g = ctx.createGain(); g.gain.value = muted.has(i) ? 0 : 1; g.connect(master); chGain.push(g);
   }
@@ -3946,26 +3860,8 @@ async function loadFile(file) {
 // 오디오 스레드(AudioWorklet)에서 SoundTouch가 원본을 직접 읽어 템포·키를 처리.
 // AudioWorklet을 못 쓰는 환경에서는 같은 엔진을 ScriptProcessor로 실행.
 let playerModule = null, EngineMain = null;
-let playerGen = 0;
 function playerMsg(m) {
   if (!player) return;
-  if (player.media) {
-    const el = player.media;
-    if (m.type === 'play') el.play().catch(() => {});
-    else if (m.type === 'pause') el.pause();
-    else if (m.type === 'seek') el.currentTime = m.t;
-    else if (m.type === 'tempo') { el.playbackRate = m.v; el.preservesPitch = true; el.webkitPreservesPitch = true; }
-    return;
-  }
-  if (player.worker) {                          // 워커(계산) + 오디오 스레드(복사)
-    if (m.type === 'play' || m.type === 'pause') player.node.port.postMessage(m);
-    else if (m.type === 'seek') { const gen = ++playerGen; player.node.port.postMessage({ type: 'seek', t: m.t, gen }); player.worker.postMessage({ type: 'seek', t: m.t, gen }); }
-    else if (m.type === 'tempo' || m.type === 'pitch') {
-      player.worker.postMessage(m);
-      if (!playing) playerMsg({ type: 'seek', t: player.t });   // 멈춰 있을 땐 미리 만든 소리를 새로 (다시 재생할 때 바로 반영)
-    }
-    return;
-  }
   if (player.script) {
     const e = player.eng;
     if (m.type === 'play') player.run = true;
@@ -3978,7 +3874,6 @@ function playerMsg(m) {
 function playerSeek(t) { player.t = t; player.at = ctx.currentTime; playerMsg({ type: 'seek', t }); }
 function playerPos() {                     // 지금 들리는 위치 (출력 지연만큼 빼서 화면·까딱이 소리와 맞게)
   if (!player) return 0;
-  if (player.media) return player.media.currentTime;
   if (!playing) return player.t;
   const lat = (ctx.outputLatency || 0) + (ctx.baseLatency || 0);
   return Math.max(0, Math.min(song.duration, player.t + Math.max(0, ctx.currentTime - player.at - lat) * rate));
@@ -3988,20 +3883,10 @@ function onPlayerPos(t, at, ended) {
   player.t = t; player.at = at;
   if (ended && playing) { playing = false; player.t = song.duration; updateButtons(); }
 }
-async function setupPlayer(ab, file) {
-  if (MEDIA_MODE && file) {
-    const el = mediaEl || (mediaEl = new Audio());
-    el.setAttribute('playsinline', ''); el.loop = false; el.preload = 'auto';
-    el.src = URL.createObjectURL(file);
-    el.preservesPitch = true; el.webkitPreservesPitch = true; el.mozPreservesPitch = true;
-    el.playbackRate = rate; el.volume = Math.min(1, outVol());
-    el.onended = () => { if (player && player.media === el) onPlayerPos(song ? song.duration : el.duration, ctx.currentTime, true); };
-    player = { media: el, t: 0, at: ctx.currentTime };
-    return;
-  }
+async function setupPlayer(ab) {
   const chs = [];
   for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chs.push(new Float32Array(ab.getChannelData(c)));
-  const audioGain = ctx.createGain(); audioGain.gain.value = outVol(); audioGain.connect(outBus || ctx.destination);
+  const audioGain = ctx.createGain(); audioGain.gain.value = outVol(); audioGain.connect(ctx.destination);
   const init = p => { p.t = 0; p.at = ctx.currentTime; playerMsg({ type: 'tempo', v: rate }); playerMsg({ type: 'pitch', v: Math.pow(2, keyShift / 12) }); };
   if (ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
     try {
@@ -4012,25 +3897,6 @@ async function setupPlayer(ab, file) {
         })().catch(err => { playerModule = null; throw err; });
       }
       await playerModule;
-      if (typeof Worker !== 'undefined' && typeof MessageChannel !== 'undefined') {
-        try {
-          const src = $('livePitchSource').textContent;
-          const core = src.slice(0, src.indexOf('//#region ../worklet-base'));
-          const wurl = URL.createObjectURL(new Blob([core + '\n' + $('engineWorkerGlue').textContent], { type: 'application/javascript' }));
-          const worker = new Worker(wurl); URL.revokeObjectURL(wurl);
-          const node = new AudioWorkletNode(ctx, 'lhimshift-queue', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
-          const mc = new MessageChannel();
-          node.port.postMessage({ type: 'port', port: mc.port2 }, [mc.port2]);
-          worker.postMessage({ type: 'init', sr: ctx.sampleRate, port: mc.port1 }, [mc.port1]);
-          node.connect(audioGain);
-          node.port.onmessage = e => { if (player && player.node === node) { player.under = e.data.under; onPlayerPos(e.data.t, e.data.at, e.data.ended); } };
-          const gen = ++playerGen;
-          node.port.postMessage({ type: 'seek', t: 0, gen });
-          worker.postMessage({ type: 'load', ch: chs, gen, T: rate, P: Math.pow(2, keyShift / 12) }, chs.map(c => c.buffer));
-          player = { node, audioGain, worker, t: 0, at: ctx.currentTime };
-          return;
-        } catch (_) { /* 아래 기존 방식으로 */ }
-      }
       const node = new AudioWorkletNode(ctx, 'lhimshift-player', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(audioGain);
       node.port.onmessage = e => { if (player && player.node === node) onPlayerPos(e.data.t, e.data.at, e.data.ended); };
@@ -4058,10 +3924,8 @@ async function setupPlayer(ab, file) {
 }
 function disposePlayer() {
   if (!player) return;
-  if (player.media) { const el = player.media; el.pause(); el.onended = null; if (el.src.startsWith('blob:')) URL.revokeObjectURL(el.src); el.removeAttribute('src'); el.load(); player = null; return; }
   if (player.script) player.node.onaudioprocess = null;
   else { player.node.port.postMessage({ type: 'dispose' }); player.node.port.onmessage = null; }
-  if (player.worker) { player.worker.postMessage({ type: 'dispose' }); setTimeout(w => w.terminate(), 500, player.worker); }
   player.node.disconnect(); player.audioGain.disconnect();
   player = null;
 }
@@ -4081,14 +3945,7 @@ function silentWavUrl() {                  // 0.5초짜리 진짜 무음 WAV (�
 }
 function unlockAudioOutput() {
   if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
-  if (streamEl && streamEl.paused) streamEl.play().catch(() => {});
   if (outputUnlocked) return; outputUnlocked = true;
-  if (MEDIA_MODE) {
-    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
-    try { mediaEl = mediaEl || new Audio(); mediaEl.setAttribute('playsinline', ''); if (!mediaEl.src) { mediaEl.src = silentWavUrl(); mediaEl.play().then(() => { if (!player) mediaEl.pause(); }).catch(() => { outputUnlocked = false; }); } } catch (_) {}
-    return;
-  }
-  if (OUT_STREAM || NO_SILENT) { try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {} return; }
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
   try {
     const a = new Audio(silentWavUrl());
@@ -4113,7 +3970,7 @@ async function loadAudio(file, buf, my) {
   showLufs();
   updateButtons();
   initAudio();
-  const breathe = () => new Promise(r => { let done = false; const go = () => { if (!done) { done = true; setTimeout(r, 0); } }; requestAnimationFrame(go); setTimeout(go, 50); });   // 화면이 한 번 그려지게 (탭이 가려져 있어도 멈추지 않게)
+  const breathe = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));   // 화면이 한 번 그려지게
   await breathe();
   let ab;
   try { ab = await ctx.decodeAudioData(buf); }
@@ -4127,7 +3984,7 @@ async function loadAudio(file, buf, my) {
   const peaks = computePeaks(ab);
   if (my !== loadSeq) return;
 
-  try { await setupPlayer(ab, file); }
+  try { await setupPlayer(ab); }
   catch (err) { if (my === loadSeq) $('info').textContent = '재생 준비 실패: ' + (err && err.message || err); return; }
   if (my !== loadSeq) { disposePlayer(); return; }
 
@@ -4217,8 +4074,7 @@ const SPK_ON = '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"
 const SPK_OFF = '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9l6 6M22 9l-6 6"/>';
 function applyVol() {
   if (master) master.gain.setTargetAtTime(outVol(), ctx.currentTime, 0.02);
-  if (player && player.media) player.media.volume = Math.min(1, outVol());
-  else if (player) player.audioGain.gain.setTargetAtTime(outVol(), ctx.currentTime, 0.02);
+  if (player) player.audioGain.gain.setTargetAtTime(outVol(), ctx.currentTime, 0.02);
   const b = $('muteBtn');
   b.classList.toggle('on', volMuted);
   b.querySelector('svg').innerHTML = volMuted ? SPK_OFF : SPK_ON;
@@ -4473,8 +4329,7 @@ if (/[?&]debug\b/.test(location.search)) {
       '보안환경: ' + isSecureContext + ' | AudioWorklet 지원: ' + !!(window.AudioWorkletNode),
       '오디오: ' + (ctx ? ctx.state + ' / ' + ctx.sampleRate + 'Hz / 지연 ' + Math.round(((ctx.outputLatency || 0) + (ctx.baseLatency || 0)) * 1000) + 'ms' : '아직 없음'),
       '오디오세션: ' + (navigator.audioSession ? navigator.audioSession.type : '미지원') + ' | 잠금해제: ' + outputUnlocked,
-      '출력: ' + (streamEl ? '미디어 재생 경로(' + (streamEl.paused ? '멈춤' : '재생') + ')' : '웹 오디오 기본') + ' | 무음반복: ' + (OUT_STREAM || NO_SILENT ? '끔' : '켬'),
-      '파일: ' + (song ? (song.kind || 'midi') + ' ' + fmt(song.duration) : '없음') + ' | 재생기: ' + (player ? (player.media ? '기본 재생기(<audio>) 속도 ' + player.media.playbackRate.toFixed(2) + (player.media.paused ? ' 멈춤' : ' 재생') : player.worker ? '워커+큐(끊김 ' + (player.under || 0) + ')' : player.script ? 'ScriptProcessor' : 'AudioWorklet') : '없음'),
+      '파일: ' + (song ? (song.kind || 'midi') + ' ' + fmt(song.duration) : '없음') + ' | 재생기: ' + (player ? (player.script ? 'ScriptProcessor' : 'AudioWorklet') : '없음'),
       '재생중: ' + playing + ' | 위치: ' + (song ? curPos().toFixed(2) : '-') + ' | 템포비율: ' + rate.toFixed(3) + ' | 키: ' + keyShift,
       '템포얼굴: ' + ($('tempoHead').classList.contains('show') ? '보임' : '숨김') + ' | 까딱: ' + (nodAnim ? nodAnim.playState + ' ' + Math.round(nodAnim.effect.getTiming().duration) + 'ms' : '없음') + ' | 기울기: ' + getComputedStyle($('tempoHead').firstElementChild).transform + ' | 박: ' + (song && playing ? (beatPosition() || 0).toFixed(2) : '-'),
       '안내문구: ' + ($('info').textContent || '(없음)'),
